@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="pico-8, tic-80, cartridge, converter">
+    <meta name="author" content="bzt">
+    <!--    o
+           o    hi, hacker!
+           ooo               -->
+    <title>PICO-8 to TIC-80 cartridge converter</title>
+    <style>
+        input { width:100%; }
+        small { opacity:50%; }
+        a[download] { display:none; }
+        #jserr { color:white; background:red; font-weight:bold; font-size: 150%; text-align:center; padding: 32px; }
+    </style>
+  </head>
+  <body>
+    <h1>PICO-8 to TIC-80 cartridge converter</h1>
+    <div id="jserr">Please enable JavaScript</div>
+    <script>document.getElementById("jserr").style.display = "none";</script>
+    <input type="file" id="input" onchange="getfile()"><br>
+    <small>Input can be either a <samp>.p8</samp> text file or a <samp>.p8.png</samp> binary file. The output is a <samp>.tic</samp> file.</small>
+    <script src="p8totic.js"></script>
+    <script>
+        function getfile() {
+            var input=document.getElementById("input");
+            if(input.files.length<1) {
+                alert("No file given.");
+            } else {
+                var reader = new FileReader();
+                reader.onloadend = function() {
+                    var p8data = new Uint8Array(reader.result);
+                    var p8totic = Module.cwrap("p8totic", "number", [ "number", "number", "number", "number" ]);
+                    const buf = Module._malloc(1024*1024);
+                    const p8 = Module._malloc(p8data.length+1);
+                    Module.HEAPU8.set(p8data, p8);
+                    var len = p8totic(p8, p8data.length, buf, 1024*1024);
+                    if(len > 0) {
+                        const view = new Uint8Array(Module.HEAPU8.buffer,buf,len);
+                        var blob = new Blob([view], { type: "application/octet-stream" });
+                        var url = window.URL.createObjectURL(blob);
+                        var fn, a = document.createElement("A");
+                        try {
+                            fn = input.files[0].name.split("/").pop().replace(".png", "").replace(".p8", "")+".tic";
+                        }catch(e) {
+                            fn = "converted.tic";
+                        }
+                        a.href = url;
+                        a.download = fn;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        window.URL.revokeObjectURL(url);
+                    } else
+                    if(len == -1)
+                        alert("Not a valid PICO-8 cartridge.");
+                    else
+                        alert("Unable to generate TIC-80 cartridge.");
+                    Module._free(buf);
+                    Module._free(p8);
+                };
+                reader.readAsArrayBuffer(input.files[0]);
+            }
+        }
+    </script>
+  </body>
+</html>
