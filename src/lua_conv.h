@@ -93,7 +93,7 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
     unicode[len] = 0;
 
     /* tokenize Lua string */
-    if(!tok_new(&tok, lua_rules, unicode, srclen)) {
+    if(!tok_new(&tok, lua_rules, unicode, len)) {
         fprintf(stderr, "p8totic: unable to tokenize??? Should never happen!\r\n");
         memcpy(dst, unicode, len);
         dst[len] = 0;
