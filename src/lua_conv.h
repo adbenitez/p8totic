@@ -137,6 +137,17 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                     tok_delete(&tok, i);
                 }
             }
+            /* replace math functions */
+            if(!strcmp(tok.tokens[i] + 1, "srand")) tok_replace(&tok, i, TOK_FUNCTION, "math.randomseed");
+            if(!strcmp(tok.tokens[i] + 1, "sqrt"))  tok_replace(&tok, i, TOK_FUNCTION, "math.sqrt");
+            if(!strcmp(tok.tokens[i] + 1, "abs"))   tok_replace(&tok, i, TOK_FUNCTION, "math.abs");
+            if(!strcmp(tok.tokens[i] + 1, "min"))   tok_replace(&tok, i, TOK_FUNCTION, "math.min");
+            if(!strcmp(tok.tokens[i] + 1, "max"))   tok_replace(&tok, i, TOK_FUNCTION, "math.max");
+            if(!strcmp(tok.tokens[i] + 1, "flr"))   tok_replace(&tok, i, TOK_FUNCTION, "math.floor");
+            if(!strcmp(tok.tokens[i] + 1, "rnd"))   tok_replace(&tok, i, TOK_FUNCTION, "math.random()*");
+        }
+        if(tok.tokens[i] && tok.tokens[i][0] == TOK_VARIABLE) {
+            if(!strcmp(tok.tokens[i] + 1, "pi"))    tok_replace(&tok, i, TOK_VARIABLE, "math.pi");
         }
     }
 
@@ -175,11 +186,11 @@ char p8totic_lua[] =
 "	end	\n"
 "end\n"
 "\n"
-*/
 "--sound\n"
+*/
 "__sfx=sfx\n"
 "function sfx(n,channel,offset)\n"
-" --does not support offset as of 0.18.0\n"
+/*" --does not support offset as of 0.18.0\n"*/
 "	if n<0 then\n"
 "	 __sfx(0,28,channel,0)\n"
 "	else\n"
@@ -188,10 +199,10 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function music(n,fadems,channelmask)\n"
-" --do nothing as of 0.18.0\n"
+/*" --do nothing as of 0.18.0\n"*/
 "end\n"
 "\n"
-"--utility\n"
+/*"--utility\n"*/
 "function stat(i)\n"
 " if i==0 then\n"
 "	 return collectgarbage(\"count\")\n"
@@ -199,14 +210,14 @@ char p8totic_lua[] =
 " return 0.5\n"
 "end\n"
 "\n"
-"--strings\n"
+/*"--strings\n"*/
 "function sub(str,i,j)\n"
 " return str:sub(i,j)\n"
 "end\n"
 "\n"
-"--permanent cart mem\n"
+/*"--permanent cart mem\n"*/
 "function cartdata(id)\n"
-" --do nothing\n"
+/*" --do nothing\n"*/
 "end\n"
 "\n"
 /*
@@ -218,8 +229,8 @@ char p8totic_lua[] =
 " pmem(i,val)\n"
 "end\n"
 "\n"
-*/
 "--tables\n"
+*/
 "add=table.insert\n"
 "\n"
 "function all(list)\n"
@@ -249,7 +260,7 @@ char p8totic_lua[] =
 "	mt = {}\n"
 "end\n"
 "\n"
-"--math\n"
+/*"--math\n"
 "srand=math.randomseed\n"
 "sqrt=math.sqrt\n"
 "abs=math.abs\n"
@@ -263,22 +274,23 @@ char p8totic_lua[] =
 " return math.random()*a\n"
 "end\n"
 "\n"
+*/
 "function sgn(a)\n"
 " if a>=0 then return 1 end\n"
 "	return -1\n"
 "end\n"
 "\n"
 "function cos(a)\n"
-" return math.cos(2*pi*a)\n"
+" return math.cos(2*math.pi*a)\n"
 "end\n"
 "\n"
 "function sin(a)\n"
-" return -math.sin(2*pi*a)\n"
+" return -math.sin(2*math.pi*a)\n"
 "end\n"
 "\n"
 "function atan2(a,b)\n"
 " b=b or 1\n"
-" return math.atan(a,b)/(2*pi)\n"
+" return math.atan(a,b)/(2*math.pi)\n"
 "end\n"
 "\n"
 "function mid(a,b,c)\n"
@@ -288,19 +300,19 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function band(a,b)\n"
-" return flr(a)&flr(b)\n"
+" return math.floor(a)&math.floor(b)\n"
 "end\n"
 "\n"
 "function bor(a,b)\n"
-" return flr(a)|flr(b)\n"
+" return math.floor(a)|math.floor(b)\n"
 "end\n"
 "\n"
 "function bxor(a,b)\n"
-" return flr(a)^flr(b)\n"
+" return math.floor(a)^math.floor(b)\n"
 "end\n"
 "\n"
 "function bnot(a,b)\n"
-" return flr(a)~flr(b)\n"
+" return math.floor(a)~math.floor(b)\n"
 "end\n"
 "\n"
 /*
@@ -312,8 +324,8 @@ char p8totic_lua[] =
 " return a>>b\n"
 "end\n"
 "\n"
-*/
 "--graphics\n"
+*/
 "__p8_color=7\n"
 "__p8_ctrans={true,false,false,false,false,false,false,false,\n"
 "             false,false,false,false,false,false,false,false}\n"
@@ -486,7 +498,7 @@ char p8totic_lua[] =
 "	for j=0,h-1 do\n"
 "	 for i=0,w-1 do\n"
 "	  sspr(sx+xoff,sy+yoff,8,8,x+xoff,y+yoff)\n"
-"			--__spr(n+j*16+i,x+i*8,y+j*8,__p8_ctrans)\n"
+/*"			--__spr(n+j*16+i,x+i*8,y+j*8,__p8_ctrans)\n"*/
 "		 xoff=xoff+8\n"
 "		end\n"
 "		yoff=yoff+8\n"
@@ -505,7 +517,7 @@ char p8totic_lua[] =
 "		end\n"
 "	end\n"
 "	\n"
-"	--__map(cel_x,cel_y,cel_w,cel_h,sx,sy,__p8_ctrans)\n"
+/*"	--__map(cel_x,cel_y,cel_w,cel_h,sx,sy,__p8_ctrans)\n"*/
 "end\n"
 "mapdraw=map\n"
 "\n"
@@ -522,10 +534,10 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function flip()\n"
-" --do nothing\n"
+/*" --do nothing\n"*/
 "end\n"
 "\n"
-"--sprite flags\n"
+/*"--sprite flags\n"*/
 "function fset(n,f,v)\n"
 "	if f>7 then\n"
 "	 __p8_sflags[n+1]=f\n"
@@ -550,7 +562,7 @@ char p8totic_lua[] =
 "	return false\n"
 "end\n"
 "\n"
-"--input\n"
+/*"--input\n"*/
 "pico8ButtonMap = {}\n"
 "pico8ButtonMap[1] = 2 -- 0 left\n"
 "pico8ButtonMap[2] = 3 -- 1 right\n"
@@ -575,20 +587,20 @@ char p8totic_lua[] =
 "	return __btnp(pico8ButtonToTic80(i, p))\n"
 "end\n"
 "\n"
-"-- TIC function to call pico-8 callbacks.\n"
+/*"-- TIC function to call pico-8 callbacks.\n"*/
 "__updateTick = true\n"
 "__initalized = false\n"
 "function TIC()\n"
 "	-- Initialize\n"
 "	if __initalized == false then\n"
-"		PICO8_PALETTE()\n"
+/*"		PICO8_PALETTE()\n"*/
 "		if _init ~= nil then\n"
 "			_init()\n"
 "		end\n"
 "		__initalized = true\n"
 "	end\n"
 "\n"
-"	-- Update and Draw\n"
+/*"	-- Update and Draw\n"*/
 "	if _update60 ~= nil then -- 60 FPS\n"
 "		_update60()\n"
 "		if _draw ~= nil then _draw() end\n"
