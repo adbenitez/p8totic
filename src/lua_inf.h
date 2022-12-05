@@ -6,7 +6,6 @@
  */
 
 /* old compression format */
-#undef LITERALS
 #define LITERALS 60
 #define READ_VAL(val) {val = *in; in++;}
 int decompress_mini(uint8_t *in_p, uint8_t *out_p, int max_len)

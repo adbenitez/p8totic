@@ -17,7 +17,8 @@ Features
 - Lua code (with additional helper [PICO-8 wrapper for TIC-80](https://github.com/musurca/pico2tic) Lua library)
 - Palette, the standard PICO-8 palette is added to the cartridge (TIC-80 supports multiple, modifiable palettes)
 
-TODO: sound effects and music.
+TODO: sound effects and music are loaded, but not saved yet. Contributions are welcome! I'd like to eliminate the Lua
+helper as much as possible, and convert Lua code with string replace instead whenever that's doable.
 
 Compilation
 -----------

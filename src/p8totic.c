@@ -24,6 +24,7 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * @brief Small tool to convert PICO-8 cartriges to TIC-80 cartridges
+ * https://gitlab.com/bztsrc/p8totic
  */
 
 #include <stdint.h>
@@ -43,14 +44,13 @@
 
 #include "lua_lib.h"    /* Lua helper, PICO-8 wrapper by musurca */
 #include "lua_inf.h"    /* PICO-8 compressed code section inflater by lexaloffle */
+#define LUAMAX 524288   /* biggest Lua code we can handle */
 
 #define HEX(a) (a>='0' && a<='9' ? a-'0' : (a>='a' && a<='f' ? a-'a'+10 : (a>='A' && a<='F' ? a-'A'+10 : 0)))
 #define TICHDR(h,s) do{\
     if(ptr - out + s > maxlen) goto err;\
     *ptr++ = h; n = s; *ptr++ = n & 0xff; *ptr++ = (n >> 8) & 0xff; *ptr++ = (n >> 16) & 0xff;\
     }while(0);
-
-#define LUAMAX 524288   /* biggest Lua code we can handle */
 
 /**
  * The default PICO-8 palette
@@ -66,13 +66,24 @@ static uint8_t picopal[48] = {
  */
 uint8_t picopal_idx(uint8_t r, uint8_t g, uint8_t b)
 {
-    uint8_t i;
+    uint8_t i, m = 0, dr, dg, db;
+    uint32_t d, dm = -1U;
+
     /* we need to mask the lower 2 bits in each channel before comparing, as those are used to store cartridge data */
     r &= ~3; g &= ~3; b &= ~3;
-    for(i = 0; i < 16; i++)
+    for(i = 0; i < 16; i++) {
+        /* exact match */
         if((picopal[i * 3] & ~3) == r && (picopal[i * 3 + 1] & ~3) == g && (picopal[i * 3 + 2] & ~3) == b)
             return i;
-    return 0;
+        /* remember closest match */
+        dr = r > picopal[i * 3 + 0] ? r - picopal[i * 3 + 0] : picopal[i * 3 + 0] - r;
+        dg = g > picopal[i * 3 + 1] ? g - picopal[i * 3 + 1] : picopal[i * 3 + 1] - g;
+        db = b > picopal[i * 3 + 2] ? b - picopal[i * 3 + 2] : picopal[i * 3 + 2] - b;
+        /* no need to calculate sqrt(), we don't need the exact distance, we just care about which one is the smallest */
+        d = (uint32_t)dr*(uint32_t)dr + (uint32_t)dg*(uint32_t)dg + (uint32_t)db*(uint32_t)db;
+        if(d < dm) { dm = d; m = i; }
+    }
+    return m;
 }
 
 /**
@@ -105,13 +116,16 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
     if(!buf || size < 1 || !out || maxlen < LUAMAX) return 0;
     memset(out, 0, maxlen);
 
-    /*** parse PICO-8 cartridge ***/
-    if(!memcmp(buf, "pico-8", 6)) {
-        /* decode textual format */
+    /****************** parse PICO-8 cartridge ******************/
+    if(!memcmp(buf, "pico-8 cartridge", 16)) {
+        /****** decode textual format ******/
+        /* skip over header */
         for(; *buf && (buf[0] != '_' || buf[1] != '_'); buf++);
         if(!buf[0]) return -1;
+
         while(*buf) {
-            /* lua script */
+
+            /*** lua script ***/
             if(!memcmp(buf, "__lua__", 7)) {
                 for(buf += 7; *buf == '\r' || *buf == '\n'; buf++);
                 for(ptr = buf; *ptr && memcmp(ptr - 1, "\n__", 3); ptr++);
@@ -120,29 +134,37 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                     lua = (uint8_t*)malloc(LUAMAX + i + 1);
                     if(!lua) goto err;
                     j = *ptr; *ptr = 0;
+                    /* add the Lua helper library */
                     memcpy(lua, p8totic_lua, i);
+                    /* add the converted Lua code */
                     pico_lua_to_tic_lua((char*)lua + i, LUAMAX, (char*)buf, ptr - buf);
                     *ptr = j;
                 }
                 buf = ptr;
             } else
-            /* sprites */
+
+            /*** sprites ***/
             if(!memcmp(buf, "__gfx__", 7)) {
                 for(buf += 7; *buf == '\r' || *buf == '\n'; buf++);
                 if(!gfx) {
                     gfx = (uint8_t*)malloc(8192);
                     if(!gfx) goto err;
                     memset(gfx, 0, 8192);
+                    /* one large 128 x 128 x 4 bit sheet, with 8 x 8 pixel sprites */
                     for(i = 0; i < 8192 && *buf && *buf != '_';) {
                         while(*buf == '\r' || *buf == '\n') buf++;
                         if(*buf == '_' || buf[1] == '_') break;
+                        /* we just load them here, we convert later when TIC-80 chunk generated
+                         * this is little endian! */
                         gfx[i++] = HEX(buf[0]) | (HEX(buf[1]) << 4);
                         buf += 2;
                     }
+                    /* the lower part of the map shared with the upper sprites */
                     if(map) memcpy(map + 4096, gfx + 4096, 4096);
                 }
             } else
-            /* sprite flags */
+
+            /*** sprite flags ***/
             if(!memcmp(buf, "__gff__", 7)) {
                 for(buf += 7; *buf == '\r' || *buf == '\n'; buf++);
                 if(!gff) {
@@ -157,24 +179,28 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                     }
                 }
             } else
-            /* label (cover image) */
+
+            /*** label (cover image) ***/
             if(!memcmp(buf, "__label__", 9)) {
                 for(buf += 9; *buf == '\r' || *buf == '\n'; buf++);
                 if(!lbl) {
+                    /* screen size is 240 x 136 x 4 bit */
                     lbl = (uint8_t*)malloc(16320);
                     if(!lbl) goto err;
                     memset(lbl, 0, 16320);
+                    /* read in 128 x 128 tetrad (64 bytes) and center on screen */
                     for(j = 0; j < 128 && *buf && *buf != '_';)
                         for(i = 0; i < 64 && *buf && *buf != '_';) {
                             while(*buf == '\r' || *buf == '\n') buf++;
                             if(*buf == '_' || buf[1] == '_') break;
-                            /* this might also encode g .. v, but we can't store that */
+                            /* this might also encode g .. v, but we can't store that. Also, little endian */
                             lbl[(j + 4) * 120 + 28 + i] = HEX(buf[0]) | (HEX(buf[1]) << 4);
                             buf += 2;
                         }
                 }
             } else
-            /* map */
+
+            /*** map ***/
             if(!memcmp(buf, "__map__", 7)) {
                 for(buf += 7; *buf == '\r' || *buf == '\n'; buf++);
                 if(!map) {
@@ -184,13 +210,16 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                     for(i = 0; i < 4096 && *buf && *buf != '_';) {
                         while(*buf == '\r' || *buf == '\n') buf++;
                         if(*buf == '_' || buf[1] == '_') break;
+                        /* 8 bit per map entry, each a sprite id, big endian */
                         map[i++] = (HEX(buf[0]) << 4) | HEX(buf[1]);
                         buf += 2;
                     }
+                    /* the lower part of the map shared with the upper sprites */
                     if(gfx) memcpy(map + 4096, gfx + 4096, 4096);
                 }
             } else
-            /* music */
+
+            /*** music ***/
             if(!memcmp(buf, "__music__", 9)) {
                 for(buf += 9; *buf == '\r' || *buf == '\n'; buf++);
                 if(!mus) {
@@ -200,17 +229,20 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                     for(i = 0; i < 256 && *buf && *buf != '_';) {
                         while(*buf == '\r' || *buf == '\n') buf++;
                         if(*buf == '_' || buf[1] == '_') break;
+                        /* flags. These are loaded in MSB in memory */
                         f = (HEX(buf[0]) << 4) | HEX(buf[1]);
                         for(buf += 2; *buf == ' '; buf++);
                         for(j = 0; j < 4; j++) {
                             if(*buf == '_' || buf[1] == '_') break;
-                            mus[i++] = (HEX(buf[0]) << 4) | HEX(buf[1]) | (((f >> j) & 1) << 7);
+                            /* big endian data and the MSB flags */
+                            mus[i++] = ((HEX(buf[0]) & 7) << 4) | HEX(buf[1]) | (((f >> j) & 1) << 7);
                             buf += 2;
                         }
                     }
                 }
             } else
-            /* sound effects */
+
+            /*** sound effects ***/
             if(!memcmp(buf, "__sfx__", 7)) {
                 for(buf += 7; *buf == '\r' || *buf == '\n'; buf++);
                 if(!snd) {
@@ -226,11 +258,14 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                         e = (HEX(buf[0]) << 4) | HEX(buf[1]); buf += 2;
                         for(j = 0; j < 32; j++) {
                             if(*buf == '_' || buf[1] == '_' || buf[2] == '_' || buf[3] == '_' || buf[4] == '_') break;
-                            /* FIXME: according to the doc, https://pico-8.fandom.com/wiki/Memory#Sound_effects,
-                             * these 20 bit blocks should be stored in 16 bits somehow... */
-                            n = (HEX(buf[0]) << 16) | (HEX(buf[1]) << 12) | (HEX(buf[2]) << 8) | (HEX(buf[3]) << 4) | HEX(buf[4]);
-                            mus[i++] = n & 0xff;
-                            mus[i++] = (n >> 8) & 0xff;
+                            /* tetrad 0..1: pitch, tetrad 2: waveform, tetrad 3: volume, tetrad 4: effect */
+                            *((uint16_t*)&mus[i]) =
+                                ((HEX(buf[1]) << 4) | HEX(buf[0]) & 0x3f) | /* pitch 0..63 */
+                                ((HEX(buf[2]) & 7) << 6) |                  /* waveform 0..7, MSB see below */
+                                ((HEX(buf[3]) & 7) << 9) |                  /* volume 0..7 */
+                                ((HEX(buf[4]) & 7) << 12) |                 /* effect 0..7 */
+                                (((HEX(buf[2]) >> 3) & 1) << 15);           /* waveform 4th bit, custom SFX id */
+                            i += 2;
                             buf += 5;
                         }
                         mus[i++] = f;   /* flags */
@@ -242,55 +277,66 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
             } else {
                 /* unknown chunk */
                 for(ptr = buf; *buf && *buf != '\r' && *buf != '\n'; buf++);
-                *buf = 0; fprintf(stderr, "p8totic: unknown chunk '%s'\r\n", ptr);
+                *buf++ = 0; fprintf(stderr, "p8totic: unknown chunk '%s'\r\n", ptr);
             }
             while(*buf && *buf != '_') buf++;
         }
     } else
     if(!memcmp(buf, "\x89PNG", 4) && (pixels = stbi_load_from_memory((const stbi_uc*)buf, size, &w, &h, &f, 4)) && w > 0 && h > 0) {
-        /* decode binary format */
+        /****** decode binary format ******/
         raw = (uint8_t*)malloc(w * h);
         if(!raw) goto err;
         for(f = 0; f < w * h; f++)
             raw[f] = ((pixels[f * 4 + 0] & 3) << 4) | ((pixels[f * 4 + 1] & 3) << 2) |
                      ((pixels[f * 4 + 2] & 3) << 0) | ((pixels[f * 4 + 3] & 3) << 6);
-        /* label (cover image) */
+
+        /*** label (cover image) ***/
+        /* screen size is 240 x 136 x 4 bit */
         lbl = (uint8_t*)malloc(16320);
         if(!lbl) goto err;
         memset(lbl, 0, 16320);
-        /* in lack of a true label, we parse a 128 x 128 area at (16,24) on the png image, where the screenshot
-         * should be on the cartridge image, trying to match truecolor pixels with pico palette */
+        /* in lack of a saved label, we parse a 128 x 128 area at (16,24) on the png image with true color pixels, where
+         * the screenshot should be on the cartridge's picture, trying to match with pico palette to make it a screen */
         for(j = 0; j < 128; j++)
             for(i = 0; i < 64; i++)
                 lbl[(j + 4) * 120 + 28 + i] =
+                    /* left pixel in lower tetrad */
                     (picopal_idx(pixels[(j + 24) * w * 4 + (i * 2 + 17) * 4 + 0],
                                  pixels[(j + 24) * w * 4 + (i * 2 + 17) * 4 + 1],
-                                 pixels[(j + 24) * w * 4 + (i * 2 + 17) * 4 + 2]) << 4) |
+                                 pixels[(j + 24) * w * 4 + (i * 2 + 17) * 4 + 2]) << 4) |   /* upper tetrad's pixel */
                      picopal_idx(pixels[(j + 24) * w * 4 + (i * 2 + 16) * 4 + 0],
                                  pixels[(j + 24) * w * 4 + (i * 2 + 16) * 4 + 1],
-                                 pixels[(j + 24) * w * 4 + (i * 2 + 16) * 4 + 2]);
-        /* sprites */
+                                 pixels[(j + 24) * w * 4 + (i * 2 + 16) * 4 + 2]);          /* lower tetrad's pixel */
+
+        /*** sprites ***/
         gfx = (uint8_t*)malloc(8192);
         if(!gfx) goto err;
+        /* one large 128 x 128 x 4 bit sheet, with 8 x 8 pixel sprites */
         memcpy(gfx, raw, 8192);
-        /* map */
+
+        /*** map ***/
         map = (uint8_t*)malloc(8192);
         if(!map) goto err;
         memcpy(map,        raw + 0x2000, 4096);
+        /* the lower part of the map shared with the upper sprites */
         memcpy(map + 4096, raw + 0x1000, 4096);
-        /* sprite flags */
+
+        /*** sprite flags ***/
         gff = (uint8_t*)malloc(256);
         if(!gff) goto err;
         memcpy(gff, raw + 0x3000, 256);
-        /* music */
+
+        /*** music ***/
         mus = (uint8_t*)malloc(256);
         if(!mus) goto err;
         memcpy(mus, raw + 0x3100, 256);
-        /* sound effects */
+
+        /*** sound effects ***/
         snd = (uint8_t*)malloc(4352);
         if(!snd) goto err;
         memcpy(snd, raw + 0x3200, 4352);
-        /* lua script */
+
+        /*** lua script ***/
         i = strlen(p8totic_lua);
         lua = (uint8_t*)malloc(LUAMAX + i + 1);
         if(!lua) goto err;
@@ -299,7 +345,9 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
         if(!lu2) goto err;
         memset(lu2, 0, LUAMAX);
         if(!pico8_code_section_decompress(raw + 0x4300, lu2, LUAMAX)) { free(lua); free(raw); free(pixels); return -1; }
+        /* add the Lua helper library */
         memcpy(lua, p8totic_lua, i);
+        /* add the inflated, converted Lua code */
         pico_lua_to_tic_lua((char*)lua + i, LUAMAX, (char*)lu2, strlen((char*)lu2));
         free(lu2);
         free(raw);
@@ -307,79 +355,123 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
     } else
         return -1;
 
-    /*** construct TIC-80 cartridge ***/
+    /****************** construct TIC-80 cartridge ******************/
     ptr = out;
-    /* CHUNK_SCREEN, cover image in bank 0 */
+
+    /*** CHUNK_SCREEN, cover image in bank 0 ***/
     if(lbl) {
+        /* 240 x 136 x 4 bit, we already have copied the 128 x 128 x 4 bit PICO-8 image at the centre */
         TICHDR(18, 16320);
         memcpy(ptr, lbl, 16320);
         ptr += n;
         free(lbl);
     }
-    /* CHUNK_TILES / sprites 0 - 255 */
+
+    /*** CHUNK_PALETTE, add a fixed PICO-8 palette ***/
+    TICHDR(12, 96);
+    memcpy(ptr, picopal, 48);       /* SCN palette */
+    memcpy(ptr + 48, picopal, 48);  /* OVR palette */
+    ptr += n;
+
+    /*** CHUNK_TILES / sprites 0 - 255 ***/
     if(gfx) {
         TICHDR(1, 256 * 32);
         raw = ptr;
-        for(e = 0; e < 256; e++) {
+        /* unlike PICO-8, the TIC-8 stores 256 sprites as array, each 32 bytes, separate 8 x 8 x 4 bit images */
+        for(e = 0; e < 256; e++) {                  /* foreach sprite */
             s = 512 * (e >> 4) + 4 * (e & 15);
-            for(j = 0; j < 8; j++, s += 64)
-                for(i = 0; i < 4; i++, raw++)
-                    *raw = (gfx[s + i] >> 4) | ((gfx[s + i] & 0xf) << 4);
+            for(j = 0; j < 8; j++, s += 64)         /* foreach row 8 */
+                for(i = 0; i < 4; i++, raw++)       /* for every two pixels 2*4 = 8 */
+                    /* PICO-8 uses most significant tetrad on the left, but TIC-80 uses least significant on the left */
+                    *raw = ((gfx[s + i] >> 4) & 0xf) | ((gfx[s + i] & 0xf) << 4);
         }
         ptr += n;
         free(gfx);
     }
-    /* CHUNK_MAP */
+
+    /*** CHUNK_MAP ***/
     if(map) {
         TICHDR(4, 240 * 136);
+        /* PICO-8 map is 128 x 64 x 8 bit, TIC-80 map size is 240 x 136 x 8 bit. Copy to the top left corner */
         for(j = 0; j < 64; j++)
             memcpy(ptr + j * 240, map + j * 128, 128);
         ptr += n;
         free(map);
     }
-    /* CHUNK_CODE */
+
+    /*** CHUNK_CODE ***/
     if(lua) {
         s = strlen((const char*)lua) + 1;
         i = 0;
-        /* write out into banks */
+        /* write out into 64k banks */
         while(s > 65535) {
             TICHDR((i << 5) | 5, 65535);
-            memcpy(ptr, lua + i * 65536, n);
+            memcpy(ptr, lua + i * 65535, n);
             ptr += n;
             s -= n; i++;
-            if(i > 7) goto err;
+            if(i > 7) {
+                fprintf(stderr, "p8totic: too many code banks, only 8 supported\r\n");
+                goto err;
+            }
         }
         /* remaining */
         if(s > 0) {
             TICHDR((i << 5) | 5, s);
-            memcpy(ptr, lua + i * 65536, n);
+            memcpy(ptr, lua + i * 65535, n);
             ptr += n;
         }
         free(lua);
     }
-    /* CHUNK_FLAGS */
+
+    /*** CHUNK_FLAGS ***/
     if(gff) {
+        /* PICO-8 format: 1 byte per sprite, bit 0: red, bit 1: orange, yellow, green, blue, purple, pink, bit 7: peach */
         /* FIXME: should we convert these flags? https://github.com/nesbox/TIC-80/wiki/fset does not tell */
         TICHDR(6, 512);
         memcpy(ptr, gff, 256);
         ptr += n;
         free(gff);
     }
-    /* CHUNK_SAMPLES, sound effects */
+
+    /*** CHUNK_SAMPLES, sound effects ***/
     if(snd) {
-        /* FIXME: not sure how to store these in TIC-80, plus text pico-8 import isn't working yet, just the binary */
+        /* PICO-8 format: 64 samples, each 68 bytes: 32 x 2 byte notes, 1 byte flags, 1 byte speed, 1 byte start, 1 byte end */
+        /* one note:
+         *  bit 0..5: pitch,
+         *  bit 6..8: waveform (0 sine, 1 tri, 2 sawtooth, 3 long square, 4 short square, 5 ringing, 6 noise, 7 ringing sine),
+         *  bit 9..11: volume,
+         *  bit 12..14: effect (0 none, 1 slide, 2 vibrato, 3 drop, 4 fade in, 5 fade out, 6 arp fast, 7 arp slow),
+         *  bit 15: waveform is a custom SFX id */
+        TICHDR(9, 4224);
+        /* 64 samples, each 66 bytes */
+        /* FIXME: not sure how to store these in TIC-80 */
+        ptr += n;
         free(snd);
     }
-    /* CHUNK_PALETTE, add a fixed PICO-8 palette */
-    TICHDR(12, 96);
-    memcpy(ptr, picopal, 48);       /* SCN palette */
-    memcpy(ptr + 48, picopal, 48);  /* OVR palette */
-    ptr += n;
-    /* CHUNK_MUSIC */
+
+    /*** CHUNK_MUSIC ***/
     if(mus) {
-        /* FIXME: not sure how to store these in TIC-80, do we need an additional CHUNK_PATTERNS too? */
+        /* PICO-8 format: 64 tracks, each 4 bytes */
+        /* one track:
+         *  byte 0: bit 7: begin loop
+         *          bit 6: channel enabled
+         *          bit 0..5: sound id
+         *  byte 1: bit 7: end loop
+         *          bit 6: channel enabled
+         *          bit 0..5: sound id
+         *  byte 2: bit 7: stop at end
+         *          bit 6: channel enabled
+         *          bit 0..5: sound id
+         *  byte 3: bit 7: ???
+         *          bit 6: channel enabled
+         *          bit 0..5: sound id */
+        TICHDR(14, 408);
+        /* 8 tracks, each 51 bytes */
+        /* FIXME: not sure how to store these in TIC-80, do we need an additional CHUNK_PATTERNS (15) too? */
+        ptr += n;
         free(mus);
     }
+
     return ptr - out;
 err:
     if(lbl) free(lbl);
