@@ -24,6 +24,7 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * @brief Simple sorce code tokenizer library
+ * https://gitlab.com/bztsrc/tok
  */
 
 #ifndef TOK_H
@@ -63,6 +64,7 @@ int  tok_insert(tok_t *tok, int idx, char type, char *str); /* insert a token be
 int  tok_replace(tok_t *tok, int idx, char type, char *str);/* replace a token */
 int  tok_append(tok_t *tok, char type, char *str);          /* append a token at the end of the list */
 int  tok_find(tok_t *tok, int idx, char type, char *str);   /* find next occurance of either type or str */
+int  tok_next(tok_t *tok, int idx, char type, char *str);   /* same as find but considers opening/closing parenthesis */
 int  tok_match(tok_t *tok, int idx, int num, ...);          /* match a token pattern */
 void tok_free(tok_t *tok);                                  /* free resources */
 void tok_dump(tok_t *tok, int sidx, int eidx);              /* for debugging */
@@ -330,7 +332,7 @@ int tok_tostr(tok_t *tok, char *dst, int maxlen)
 }
 
 /**
- * Returns how big destionation buffer is required for detokenization.
+ * Returns how big destination buffer is required for detokenization.
  * @param tok: tok instance
  * @return size of the constructed string plus one (for the zero terminator)
  */
