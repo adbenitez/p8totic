@@ -20,6 +20,10 @@
     <h1>PICO-8 to TIC-80 cartridge converter</h1>
     <div id="jserr">Please enable JavaScript</div>
     <script>document.getElementById("jserr").style.display = "none";</script>
+    <p>This is a <i>Free and Open Source</i> tool, licensed under the <i>MIT license</i> and written in ANSI C. It's aching to be
+    feature complete, therefore it is able to convert codepages, <b>Lua syntax</b> (like <tt>+=</tt> and <tt>!=</tt> operators for
+    example) and <b>API calls</b> too. Check out its <a href="https://gitlab.com/bztsrc/p8totic">source</a>. Contributions and
+    improvements are always welcome!</p>
     <input type="file" id="input" onchange="getfile()"><br>
     <small>Input can be either a <samp>.p8</samp> text file or a <samp>.p8.png</samp> binary file. The output is a <samp>.tic</samp> file.</small>
     <script src="p8totic.js"></script>

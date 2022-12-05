@@ -109,7 +109,7 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         /* replace "!=" with "~=" */
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_OPERATOR && tok.tokens[i][1] == '!' && tok.tokens[i][2] == '=' &&
           !tok.tokens[i][3]) tok.tokens[i][1] = '~';
-        /* convert shorthand operands, like "var+=" -> "var=var+" */
+        /* convert shorthand operators, like "var +=" -> "var = var +" */
         if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR) && tok.tokens[i + 2][2] == '=' &&
           !tok.tokens[i + 2][3] && strchr("+-*/%&^", tok.tokens[i + 2][1])) {
             tok_insert(&tok, i + 3, TOK_OPERATOR, tok.tokens[i + 2] + 1);
@@ -163,15 +163,28 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
 
 /**
  * PICO-8 Wrapper for the TIC-80 Computer
+ * by @musurca
  * https://github.com/musurca/pico2tic
  *
- * Reformated as a C string, and parts removed that are converted
+ * by bzt: reformated as a C string, and parts removed that are already converted
  */
 char p8totic_lua[] =
-"--PICO-8 Wrapper for the TIC-80 Computer\n"
-"--https://github.com/musurca/pico2tic\n"
+"-- Converted from PICO-8 cartridge by --\n"
+"--  https://bztsrc.gitlab.io/p8totic  --\n"
 "\n"
-/* not needed, we insert the palette into the cartridge directly */
+/*
+--PICO-8 Wrapper for the TIC-80 Computer
+--by @musurca
+----------------------------------------
+-- Wraps the PICO-8 API for ease of porting games
+-- to the TIC-80. Favors compatibility over performance.
+----------------------------------------
+--known issues:
+-- * swapping elements in the screen palette--e.g. pal(a,b,1)--doesn't work properly yet. However, pal(a,b) does work
+-- * flip_x and flip_y are currently ignored in spr() and sspr()
+-- * music() and flip() do nothing. sfx() does not take into account offset
+-- * stat(1) always returns "0.5"
+*/
 /*
 "--set palette\n"
 "PAL_PICO8=\"0000001D2B537E2553008751AB52365F574FC2C3C7FFF1E8FF004DFFA300FFEC2700E43629ADFF83769CFF77A8FFCCAA\"\n"
