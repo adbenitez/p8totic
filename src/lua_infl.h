@@ -1,7 +1,7 @@
 /*
- * lua_inf.h
+ * lua_infl.h
  *
- * @brief Lua inflate routines (with minor modifications for ANSI C by bzt)
+ * @brief PICO-8 Lua code inflate routines (with minor modifications for ANSI C by bzt)
  * https://github.com/dansanderson/lexaloffle
  */
 

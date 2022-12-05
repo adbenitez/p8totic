@@ -42,8 +42,8 @@
 #define STBI_ASSERT(x)
 #include "stb_image.h"
 
-#include "lua_lib.h"    /* Lua helper, PICO-8 wrapper by musurca */
-#include "lua_inf.h"    /* PICO-8 compressed code section inflater by lexaloffle */
+#include "lua_conv.h"   /* Lua converter and helper lib, PICO-8 wrapper by musurca */
+#include "lua_infl.h"   /* PICO-8 compressed code section inflater by lexaloffle */
 #define LUAMAX 524288   /* biggest Lua code we can handle */
 
 #define HEX(a) (a>='0' && a<='9' ? a-'0' : (a>='a' && a<='f' ? a-'a'+10 : (a>='A' && a<='F' ? a-'A'+10 : 0)))
@@ -87,29 +87,11 @@ uint8_t picopal_idx(uint8_t r, uint8_t g, uint8_t b)
 }
 
 /**
- * Lua syntax converter
- *   src is zero terminated (but you can also use srclen)
- *   dst is at least 512k (but use maxlen)
- */
-static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
-{
-    int len;
-
-    /* FIXME: if there's any syntax difference between PICO-8 and TIC-80, replace strings here */
-    memcpy(dst, src, srclen);
-
-    len = srclen;
-    dst[len] = 0;
-    return len;
-}
-
-/**
  * Public API function to convert cartridges
  */
 int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
 {
     int w = 0, h = 0, f, i, j, d, s, e, n;
-    unsigned long dstSize;
     uint8_t *ptr, *pixels = NULL, *raw = NULL, *lua = NULL, *lu2 = NULL, *lbl = NULL;
     uint8_t *gfx = NULL, *gff = NULL, *map = NULL, *mus = NULL, *snd = NULL;
 
@@ -259,19 +241,19 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                         for(j = 0; j < 32; j++) {
                             if(*buf == '_' || buf[1] == '_' || buf[2] == '_' || buf[3] == '_' || buf[4] == '_') break;
                             /* tetrad 0..1: pitch, tetrad 2: waveform, tetrad 3: volume, tetrad 4: effect */
-                            *((uint16_t*)&mus[i]) =
-                                ((HEX(buf[1]) << 4) | HEX(buf[0]) & 0x3f) | /* pitch 0..63 */
-                                ((HEX(buf[2]) & 7) << 6) |                  /* waveform 0..7, MSB see below */
-                                ((HEX(buf[3]) & 7) << 9) |                  /* volume 0..7 */
-                                ((HEX(buf[4]) & 7) << 12) |                 /* effect 0..7 */
-                                (((HEX(buf[2]) >> 3) & 1) << 15);           /* waveform 4th bit, custom SFX id */
+                            *((uint16_t*)&snd[i]) =
+                                ((HEX(buf[1]) << 4) | (HEX(buf[0]) & 0x3f)) |   /* pitch 0..63 */
+                                ((HEX(buf[2]) & 7) << 6) |                      /* waveform 0..7, MSB see below */
+                                ((HEX(buf[3]) & 7) << 9) |                      /* volume 0..7 */
+                                ((HEX(buf[4]) & 7) << 12) |                     /* effect 0..7 */
+                                (((HEX(buf[2]) >> 3) & 1) << 15);               /* waveform 4th bit, custom SFX id */
                             i += 2;
                             buf += 5;
                         }
-                        mus[i++] = f;   /* flags */
-                        mus[i++] = d;   /* we have duration here, but according to the doc this should be speed? */
-                        mus[i++] = s;   /* loop start */
-                        mus[i++] = e;   /* loop end */
+                        snd[i++] = f;   /* flags */
+                        snd[i++] = d;   /* we have duration here, but according to the doc this should be speed? */
+                        snd[i++] = s;   /* loop start */
+                        snd[i++] = e;   /* loop end */
                     }
                 }
             } else {
@@ -494,7 +476,7 @@ int main(int argc, char **argv)
 {
     FILE *f;
     uint8_t *buf = NULL, *out;
-    int i, size = 0;
+    size_t size = 0;
     char *fn = NULL, *c;
 
     /* parse command line */
@@ -523,7 +505,7 @@ int main(int argc, char **argv)
         buf = (uint8_t*)malloc(size + 1);
         if(!buf) { fprintf(stderr, "p8totic: unable to allocate memory\r\n"); exit(1); }
         memset(buf, 0, size + 1);
-        i = fread(buf, 1, size, f);
+        if(fread(buf, 1, size, f) != size) size = 0;
         fclose(f);
     }
     if(!buf || size < 1 || (memcmp(buf, "pico-8", 6) && memcmp(buf, "\x89PNG", 4))) {

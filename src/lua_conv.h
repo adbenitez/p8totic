@@ -1,16 +1,167 @@
 /*
- * lua_lib.h
+ * lua_conv.h
  *
- * Reformated as a C string, otherwise verbatim
+ * Copyright (C) 2022 bzt (bztsrc@gitlab) MIT license
+ * Copyright (C) 2022 musurca (PICO-8 wrapper library)
  *
- * @brief PICO-8 Wrapper for the TIC-80 Computer
- * https://github.com/musurca/pico2tic
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use, copy,
+ * modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ *
+ * @brief PICO-8 Lua to TIC-80 converter
  */
 
+#define TOK_IMPLEMENTATION
+#include "tok.h"
+
+/* PICO-8 codepage to UTF-8 UNICODE */
+const char *pico_utf8[] = {
+    "▮","■","□","⁙","⁘","‖","◀","▶","「","」","¥","•","、","。","゛","゜",
+    " ","!","\"","#","$","%","&","'","(",")","*","+",",","-",".","/",
+    "0","1","2","3","4","5","6","7","8","9",":",";","<","=",">","?",
+    "@","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O",
+    "P","Q","R","S","T","U","V","W","X","Y","Z","[","\\","]","^","_",
+    "`","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o",
+    "p","q","r","s","t","u","v","w","x","y","z","{","|","}","~","○",
+    "█","▒","🐱","⬇","️░","✽","●","♥","☉","웃","⌂","⬅","️😐","♪","🅾","️◆",
+    "…","➡","️★","⧗","⬆","️ˇ","∧","❎","▤","▥","あ","い","う","え","お","か",
+    "き","く","け","こ","さ","し","す","せ","そ","た","ち","つ","て","と","な","に",
+    "ぬ","ね","の","は","ひ","ふ","へ","ほ","ま","み","む","め","も","や","ゆ","よ",
+    "ら","り","る","れ","ろ","わ","を","ん","っ","ゃ","ゅ","ょ","ア","イ","ウ","エ",
+    "オ","カ","キ","ク","ケ","コ","サ","シ","ス","セ","ソ","タ","チ","ツ","テ","ト",
+    "ナ","ニ","ヌ","ネ","ノ","ハ","ヒ","フ","ヘ","ホ","マ","ミ","ム","メ","モ","ヤ",
+    "ユ","ヨ","ラ","リ","ル","レ","ロ","ワ","ヲ","ン","ッ","ャ","ュ","ョ","◜","◝"
+};
+
+/* configure lua token types here */
+char *lua_com[] = { "\\-\\-.*?$", NULL };
+char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|!][:=]?", NULL };
+char *lua_num[] = { "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
+char *lua_str[] = { "\"", "\'", NULL };
+char *lua_sep[] = { "[", "]", "{", "}", ",", ";", ":", NULL };
+char *lua_typ[] = { "false", "local", "nil", "true", NULL };
+char *lua_kws[] = { "and", "break", "do", "else", "elseif", "end", "for", "function", "if", "in", "not", "or",
+    "repeat", "return", "then", "until", "while", NULL };
+char **lua_rules[] = { lua_com, NULL, lua_ops, lua_num, lua_str, lua_sep, lua_typ, lua_kws };
+
+/**
+ * Lua syntax converter
+ *   src is zero terminated (but you can also use srclen)
+ *   dst is at least 512k (but use maxlen)
+ */
+static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
+{
+    tok_t tok;
+    unsigned int k;
+    int i, j, len;
+    char *unicode;
+
+    /* first, replace PICO-8 characters with UTF-8 */
+    unicode = (char*)malloc(srclen * 6 + 1);
+    if(!unicode) {
+        memcpy(dst, src, srclen);
+        dst[srclen] = 0;
+        return srclen;
+    }
+    for(i = len = 0; src[i] && i < srclen; i++) {
+        k = (unsigned int)((uint8_t)src[i]);
+        if(k < 16) {
+            /* control codes are the same */
+            unicode[len++] = src[i];
+        } else {
+            j = strlen(pico_utf8[k - 16]);
+            memcpy(unicode + len, pico_utf8[k - 16], j);
+            len += j;
+        }
+    }
+    unicode[len] = 0;
+
+    /* tokenize Lua string */
+    if(!tok_new(&tok, lua_rules, unicode, srclen)) {
+        fprintf(stderr, "p8totic: unable to tokenize??? Should never happen!\r\n");
+        memcpy(dst, unicode, len);
+        dst[len] = 0;
+        free(unicode);
+        return len;
+    }
+    free(unicode);
+
+    /* FIXME: if there's any more syntax or API difference between PICO-8 and TIC-80, replace tokens here.
+     * Also, if you add a Lua API syntax change, remove the relevant part from the helper lib below! */
+    for(i = 0; i < tok.num; i++) {
+        /*** syntax changes ***/
+        /* replace "!=" with "~=" */
+        if(tok.tokens[i] && tok.tokens[i][0] == TOK_OPERATOR && tok.tokens[i][1] == '!' && tok.tokens[i][2] == '=' &&
+          !tok.tokens[i][3]) tok.tokens[i][1] = '~';
+        /* convert shorthand operands, like "var+=" -> "var=var+" */
+        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR) && tok.tokens[i + 2][2] == '=' &&
+          !tok.tokens[i + 2][3] && strchr("+-*/%&^", tok.tokens[i + 2][1])) {
+            tok_insert(&tok, i + 3, TOK_OPERATOR, tok.tokens[i + 2] + 1);
+            tok_insert(&tok, i + 3, TOK_VARIABLE, tok.tokens[i] + 1);
+            tok.tokens[i + 2][1] = '='; tok.tokens[i + 2][2] = 0;
+            tok.tokens[i + 4][2] = 0;
+        }
+        if(tok_match(&tok, i, 2, TOK_VARIABLE, TOK_OPERATOR) && tok.tokens[i + 1][2] == '=' && !tok.tokens[i + 1][3] &&
+          strchr("+-*/%&^", tok.tokens[i + 1][1])) {
+            tok_insert(&tok, i + 2, TOK_OPERATOR, tok.tokens[i + 1] + 1);
+            tok_insert(&tok, i + 2, TOK_VARIABLE, tok.tokens[i] + 1);
+            tok.tokens[i + 1][1] = '='; tok.tokens[i + 1][2] = 0;
+            tok.tokens[i + 3][2] = 0;
+        }
+        /*** API function name changes ***/
+        if(tok.tokens[i] && tok.tokens[i][0] == TOK_FUNCTION) {
+            /* replace dget and dset with pmem */
+            if(!strcmp(tok.tokens[i] + 1, "dget") || !strcmp(tok.tokens[i] + 1, "dset"))
+                strcpy(tok.tokens[i] + 1, "pmem");
+            /* replace shr() and shl() functions with infix operators, like "shl(a,b)" -> "(a<<b)" */
+            if(!strcmp(tok.tokens[i] + 1, "shl") || !strcmp(tok.tokens[i] + 1, "shr")) {
+                j = tok_next(&tok, i + 2, TOK_SEPARATOR, ",");
+                if(j > i) {
+                    tok_replace(&tok, j, TOK_OPERATOR, !strcmp(tok.tokens[i] + 1, "shl") ? "<<" : ">>");
+                    tok_delete(&tok, i);
+                }
+            }
+        }
+    }
+
+    /* detokenize, aka. serialize into a string */
+    if((len = tok_tostr(&tok, dst, maxlen)) < 1) {
+        fprintf(stderr, "p8totic: unable to serialize??? Should never happen!\r\n");
+        len = 0;
+    }
+    dst[len] = 0;
+    tok_free(&tok);
+    return len;
+}
+
+/**
+ * PICO-8 Wrapper for the TIC-80 Computer
+ * https://github.com/musurca/pico2tic
+ *
+ * Reformated as a C string, and parts removed that are converted
+ */
 char p8totic_lua[] =
 "--PICO-8 Wrapper for the TIC-80 Computer\n"
 "--https://github.com/musurca/pico2tic\n"
 "\n"
+/* not needed, we insert the palette into the cartridge directly */
+/*
 "--set palette\n"
 "PAL_PICO8=\"0000001D2B537E2553008751AB52365F574FC2C3C7FFF1E8FF004DFFA300FFEC2700E43629ADFF83769CFF77A8FFCCAA\"\n"
 "function PICO8_PALETTE()\n"
@@ -24,6 +175,7 @@ char p8totic_lua[] =
 "	end	\n"
 "end\n"
 "\n"
+*/
 "--sound\n"
 "__sfx=sfx\n"
 "function sfx(n,channel,offset)\n"
@@ -57,6 +209,7 @@ char p8totic_lua[] =
 " --do nothing\n"
 "end\n"
 "\n"
+/*
 "function dget(i)\n"
 " return pmem(i)\n"
 "end\n"
@@ -65,6 +218,7 @@ char p8totic_lua[] =
 " pmem(i,val)\n"
 "end\n"
 "\n"
+*/
 "--tables\n"
 "add=table.insert\n"
 "\n"
@@ -149,6 +303,7 @@ char p8totic_lua[] =
 " return flr(a)~flr(b)\n"
 "end\n"
 "\n"
+/*
 "function shl(a,b)\n"
 " return a<<b\n"
 "end\n"
@@ -157,6 +312,7 @@ char p8totic_lua[] =
 " return a>>b\n"
 "end\n"
 "\n"
+*/
 "--graphics\n"
 "__p8_color=7\n"
 "__p8_ctrans={true,false,false,false,false,false,false,false,\n"
@@ -214,9 +370,7 @@ char p8totic_lua[] =
 "		 for i=0,15 do\n"
 "		  poke4(0x7FE0+i,i)\n"
 "		 end\n"
-"		else\n"
-"		 PICO8_PALETTE()\n"
-"		end\n"
+"	 end\n"
 "	else\n"
 "	 c0=flr(c0%16)\n"
 "	 if c1<0 then\n"

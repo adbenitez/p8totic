@@ -14,11 +14,11 @@ Features
 - Cover image (cartridge label, centered on the 240 x 136 screen)
 - Sprites (all 256)
 - Map (the map is expanded from 128 x 64 to 240 x 136)
-- Lua code (with additional helper [PICO-8 wrapper for TIC-80](https://github.com/musurca/pico2tic) Lua library)
+- Lua code (with syntax fixer, API replacer and an additional helper [PICO-8 wrapper for TIC-80](https://github.com/musurca/pico2tic) Lua library)
 - Palette, the standard PICO-8 palette is added to the cartridge (TIC-80 supports multiple, modifiable palettes)
 
-TODO: sound effects and music are loaded, but not saved yet. Contributions are welcome! I'd like to eliminate the Lua
-helper as much as possible, and convert Lua code with string replace instead whenever that's doable.
+TODO: sound effects and music are loaded, but not saved yet. Contributions from someone familiar with the TIC-80 sfx and music
+in-memory layout are welcome!
 
 Compilation
 -----------
