@@ -49,6 +49,30 @@ const char *pico_utf8[] = {
     "ユ","ヨ","ラ","リ","ル","レ","ロ","ワ","ヲ","ン","ッ","ャ","ュ","ョ","◜","◝"
 };
 
+/**
+ * Replace PICO-8 characters with UTF-8
+ */
+int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
+{
+    uint8_t *orig = dst, *end = dst + maxlen - 6;
+    int i, j, l;
+    unsigned int k;
+
+    for(i = 0; src[i] && i < srclen && dst < end; i++) {
+        k = (unsigned int)((uint8_t)src[i]);
+        if(k < 16) {
+            /* control codes are the same */
+            *dst++ = src[i];
+        } else {
+            j = strlen(pico_utf8[k - 16]);
+            memcpy(dst, pico_utf8[k - 16], j);
+            dst += j;
+        }
+    }
+    *dst = 0;
+    return (int)((uintptr_t)dst - (uintptr_t)orig);
+}
+
 /* configure lua token types here */
 char *lua_com[] = { "\\-\\-.*?$", NULL };
 char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|!][:=]?", NULL };
@@ -68,39 +92,15 @@ char **lua_rules[] = { lua_com, NULL, lua_ops, lua_num, lua_str, lua_sep, lua_ty
 static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
 {
     tok_t tok;
-    unsigned int k;
     int i, j, len;
-    char *unicode;
 
-    /* first, replace PICO-8 characters with UTF-8 */
-    unicode = (char*)malloc(srclen * 6 + 1);
-    if(!unicode) {
+    /* tokenize Lua string */
+    if(!tok_new(&tok, lua_rules, src, srclen)) {
+        fprintf(stderr, "p8totic: unable to tokenize??? Should never happen!\r\n");
         memcpy(dst, src, srclen);
         dst[srclen] = 0;
         return srclen;
     }
-    for(i = len = 0; src[i] && i < srclen; i++) {
-        k = (unsigned int)((uint8_t)src[i]);
-        if(k < 16) {
-            /* control codes are the same */
-            unicode[len++] = src[i];
-        } else {
-            j = strlen(pico_utf8[k - 16]);
-            memcpy(unicode + len, pico_utf8[k - 16], j);
-            len += j;
-        }
-    }
-    unicode[len] = 0;
-
-    /* tokenize Lua string */
-    if(!tok_new(&tok, lua_rules, unicode, len)) {
-        fprintf(stderr, "p8totic: unable to tokenize??? Should never happen!\r\n");
-        memcpy(dst, unicode, len);
-        dst[len] = 0;
-        free(unicode);
-        return len;
-    }
-    free(unicode);
 
     /* FIXME: if there's any more syntax or API difference between PICO-8 and TIC-80, replace tokens here.
      * Also, if you add a Lua API syntax change, remove the relevant part from the helper lib below! */

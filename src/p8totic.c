@@ -72,6 +72,21 @@ static inline int32_t ceildiv(int32_t a, int32_t b) { return (a + b - 1) / b; }
     }while(0);
 
 /**
+ * The default PICO-8 waveforms
+ */
+/* FIXME: add wave patterns, each value one tetrad 2's complement, 32 samples per wave */
+static uint8_t picowave[128] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 0 - sine */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 1 - triangle */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 2 - sawtooth */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 3 - square */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 4 - short square / pulse */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 5 - ringing / organ */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 6 - noise */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00  /* 7 - ringing sine / phaser */
+};
+
+/**
  * The default PICO-8 palette
  */
 static uint8_t picopal[48] = {
@@ -113,7 +128,8 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
     Header header;
     int w = 0, h = 0, f, i, j, d, s, e, n;
     uint8_t *ptr, *pixels = NULL, *raw = NULL, *lua = NULL, *lu2 = NULL, *lbl = NULL;
-    uint8_t *gfx = NULL, *gff = NULL, *map = NULL, *mus = NULL, *snd = NULL;
+    uint8_t *gfx = NULL, *gff = NULL, *map = NULL, *mus = NULL, *snd = NULL, *S, *D;
+    uint16_t *sn, *dn;
 
     if(!buf || size < 1 || !out || maxlen < LUAMAX) return 0;
     memset(out, 0, maxlen);
@@ -136,6 +152,7 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                     lua = (uint8_t*)malloc(LUAMAX + i + 1);
                     if(!lua) goto err;
                     j = *ptr; *ptr = 0;
+                    /* no need for pico_lua_to_utf(), this is already utf-8 */
                     /* add the Lua helper library */
                     memcpy(lua, p8totic_lua, i);
                     /* add the converted Lua code */
@@ -370,11 +387,19 @@ uncomp:         free(pixels);
         lu2 = (uint8_t*)malloc(LUAMAX);
         if(!lu2) goto err;
         memset(lu2, 0, LUAMAX);
-        if(!pico8_code_section_decompress(raw + 0x4300, lu2, LUAMAX)) { free(lua); free(raw); free(pixels); return -1; }
-        /* add the Lua helper library */
-        memcpy(lua, p8totic_lua, i);
-        /* add the inflated, converted Lua code */
-        pico_lua_to_tic_lua((char*)lua + i, LUAMAX, (char*)lu2, strlen((char*)lu2));
+        pico8_code_section_decompress(raw + 0x4300, lua, LUAMAX);
+        if(!lua[0]) {
+            fprintf(stderr, "p8totic: unable to decompress Lua\r\n");
+            free(lua); lua = NULL;
+        } else {
+            /* convert to utf-8 */
+            j = pico_lua_to_utf8(lu2, LUAMAX, lua, strlen((char*)lua));
+            memset(lua, 0, LUAMAX + i + 1);
+            /* add the Lua helper library */
+            memcpy(lua, p8totic_lua, i);
+            /* add the inflated, converted Lua code */
+            pico_lua_to_tic_lua((char*)lua + i, LUAMAX, (char*)lu2, j);
+        }
         free(lu2);
         free(raw);
         free(pixels);
@@ -398,6 +423,14 @@ uncomp:         free(pixels);
     memcpy(ptr, picopal, 48);       /* SCN palette */
     memcpy(ptr + 48, picopal, 48);  /* OVR palette */
     ptr += n;
+
+    /** CHUNK_WAVEFORM, add fixed PICO-8 waveforms ***/
+    TICHDR(10, 256);
+    memcpy(ptr, picowave, 128);
+    ptr += n;
+
+    /*** CHUNK_DEFAULT, needed otherwise palette and waveforms not loaded ***/
+    TICHDR(17, 0);
 
     /*** CHUNK_TILES / sprites 0 - 255 ***/
     if(gfx) {
@@ -425,30 +458,6 @@ uncomp:         free(pixels);
         free(map);
     }
 
-    /*** CHUNK_CODE ***/
-    if(lua) {
-        s = strlen((const char*)lua) + 1;
-        i = 0;
-        /* write out into 64k banks */
-        while(s > 65535) {
-            TICHDR((i << 5) | 5, 65535);
-            memcpy(ptr, lua + i * 65535, n);
-            ptr += n;
-            s -= n; i++;
-            if(i > 7) {
-                fprintf(stderr, "p8totic: too many code banks, only 8 supported\r\n");
-                goto err;
-            }
-        }
-        /* remaining */
-        if(s > 0) {
-            TICHDR((i << 5) | 5, s);
-            memcpy(ptr, lua + i * 65535, n);
-            ptr += n;
-        }
-        free(lua);
-    }
-
     /*** CHUNK_FLAGS ***/
     if(gff) {
         /* PICO-8 format: 1 byte per sprite, bit 0: red, bit 1: orange, yellow, green, blue, purple, pink, bit 7: peach */
@@ -471,6 +480,22 @@ uncomp:         free(pixels);
         TICHDR(9, 4224);
         /* 64 samples, each 66 bytes */
         /* FIXME: not sure how to store these in TIC-80 */
+        for(j = 0; j < 64; j++) {
+            S = snd + j * 68; sn = (uint16_t*)S;
+            D = ptr + j * 66; dn = (uint16_t*)D;
+            for(i = 0; i < 30; i++) {
+                dn[i] |= ((sn[i] >> 9) & 7) << 1;   /* volume*2 FIXME: is this reversed? */
+                dn[i] |= ((sn[i] >> 6) & 7) << 4;   /* wave */
+                dn[i] |= ((sn[i] >> 0) & 7) << 13;  /* pitch*2 */
+                /* FIXME: what about effect and custom bit? */
+            }
+            D[60] |= (S[65] & 7) << 4;              /* speed */
+            /* makes no sense. this can store max 15, but we have 30 notes. Let's assume they address every even note */
+            e = (D[67] > 30 ? 30 : D[67]) >> 1;     /* loop end */
+            s = (D[66] > 30 ? 30 : D[66]) >> 1;     /* loop start */
+            d = ((e - s) << 1) | s;                 /* we need start and size */
+            D[62] = D[63] = D[64] = D[65] = d;      /* loop for wave, volume, arpeggio, pitch */
+        }
         ptr += n;
         free(snd);
     }
@@ -496,6 +521,30 @@ uncomp:         free(pixels);
         /* FIXME: not sure how to store these in TIC-80, do we need an additional CHUNK_PATTERNS (15) too? */
         ptr += n;
         free(mus);
+    }
+
+    /*** CHUNK_CODE ***/
+    if(lua) {
+        s = strlen((const char*)lua) + 1;
+        i = 0;
+        /* write out into 64k banks */
+        while(s > 65535) {
+            TICHDR((i << 5) | 5, 65535);
+            memcpy(ptr, lua + i * 65535, n);
+            ptr += n;
+            s -= n; i++;
+            if(i > 7) {
+                fprintf(stderr, "p8totic: too many code banks, only 8 supported\r\n");
+                goto err;
+            }
+        }
+        /* remaining */
+        if(s > 0) {
+            TICHDR((i << 5) | 5, s);
+            memcpy(ptr, lua + i * 65535, n);
+            ptr += n;
+        }
+        free(lua);
     }
 
     return ptr - out;
