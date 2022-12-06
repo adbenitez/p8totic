@@ -46,6 +46,25 @@
 #include "lua_infl.h"   /* PICO-8 compressed code section inflater by lexaloffle */
 #define LUAMAX 524288   /* biggest Lua code we can handle */
 
+/* stuff needed to decrypt a TIC-80 png cartridge, from src/ext/png.c (see https://github.com/nesbox/TIC-80) */
+typedef union {
+    struct { uint32_t bits:8; uint32_t size:24; };
+    uint8_t data[4];
+} Header;
+#define BITS_IN_BYTE 8
+#define HEADER_BITS 4
+#define HEADER_SIZE (sizeof(Header) * BITS_IN_BYTE / HEADER_BITS)
+#define BITCHECK(a,b)       (!!((a) & (1ULL<<(b))))
+#define _BITSET(a,b)        ((a) |= (1ULL<<(b)))
+#define _BITCLEAR(a,b)      ((a) &= ~(1ULL<<(b)))
+static inline void bitcpy(uint8_t* dst, uint32_t to, const uint8_t* src, uint32_t from, uint32_t size) {
+    int i;
+    for(i = 0; i < size; i++, to++, from++)
+        BITCHECK(src[from >> 3], from & 7) ? _BITSET(dst[to >> 3], to & 7) : _BITCLEAR(dst[to >> 3], to & 7);
+}
+static inline int32_t ceildiv(int32_t a, int32_t b) { return (a + b - 1) / b; }
+/* TIC-80 png stuff end */
+
 #define HEX(a) (a>='0' && a<='9' ? a-'0' : (a>='a' && a<='f' ? a-'a'+10 : (a>='A' && a<='F' ? a-'A'+10 : 0)))
 #define TICHDR(h,s) do{\
     if(ptr - out + s > maxlen) goto err;\
@@ -91,6 +110,7 @@ uint8_t picopal_idx(uint8_t r, uint8_t g, uint8_t b)
  */
 int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
 {
+    Header header;
     int w = 0, h = 0, f, i, j, d, s, e, n;
     uint8_t *ptr, *pixels = NULL, *raw = NULL, *lua = NULL, *lu2 = NULL, *lbl = NULL;
     uint8_t *gfx = NULL, *gff = NULL, *map = NULL, *mus = NULL, *snd = NULL;
@@ -265,6 +285,30 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
         }
     } else
     if(!memcmp(buf, "\x89PNG", 4) && (pixels = stbi_load_from_memory((const stbi_uc*)buf, size, &w, &h, &f, 4)) && w > 0 && h > 0) {
+        /*** Ooops, this must be a TIC-80 png cartridge. ***/
+        if(w == 256 && h == 256) {
+            /* first, let's see if it has a cartridge chunk */
+            for(raw = buf + 8; raw < buf + size - 12; raw += n + 12) {
+                n = ((raw[0] << 24) | (raw[1] << 16) | (raw[2] << 8) | raw[3]);
+                if(!memcmp(raw + 4, "caRt", 4)) { raw += 12; goto uncomp; }
+            }
+            /* nope, fallback to steganography. This code is (mostly) from png_decode() in TIC-80/src/ext/png.c */
+            for (i = 0; i < HEADER_SIZE; i++)
+                bitcpy(header.data, i * HEADER_BITS, pixels, i << 3, HEADER_BITS);
+            if (header.bits > 0 && header.bits <= BITS_IN_BYTE && header.size > 0
+              && header.size <= w * h * 4 * header.bits / BITS_IN_BYTE - HEADER_SIZE) {
+                n = header.size + ceildiv(header.size * BITS_IN_BYTE % header.bits, BITS_IN_BYTE);
+                raw = (uint8_t*)malloc(n);
+                if(!raw) goto err;
+                for (i = 0, e = ceildiv(header.size * BITS_IN_BYTE, header.bits); i < e; i++)
+                    bitcpy(raw, i * header.bits, pixels + HEADER_SIZE, i << 3, header.bits);
+uncomp:         free(pixels);
+                s = 0; ptr = (uint8_t*)stbi_zlib_decode_malloc_guesssize((const char *)raw, n, 8192, &s);
+                if(raw < buf || raw > buf + size) free(raw);
+                if(ptr) { if(s > maxlen) { s = maxlen; } memcpy(out, ptr, s); free(ptr); return s; }
+            }
+            return -1;
+        }
         /****** decode binary format ******/
         raw = (uint8_t*)malloc(w * h);
         if(!raw) goto err;
@@ -359,9 +403,9 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
     if(gfx) {
         TICHDR(1, 256 * 32);
         raw = ptr;
-        /* unlike PICO-8, the TIC-8 stores 256 sprites as array, each 32 bytes, separate 8 x 8 x 4 bit images */
+        /* unlike PICO-8, the TIC-8 stores the sprites as an array, each 32 bytes, separate 8 x 8 x 4 bit images */
         for(e = 0; e < 256; e++) {                  /* foreach sprite */
-            s = 512 * (e >> 4) + 4 * (e & 15);
+            s = 512 * (e >> 4) + 4 * (e & 15);      /* top left pixel on sprite sheet */
             for(j = 0; j < 8; j++, s += 64)         /* foreach row 8 */
                 for(i = 0; i < 4; i++, raw++)       /* for every two pixels 2*4 = 8 */
                     /* PICO-8 uses most significant tetrad on the left, but TIC-80 uses least significant on the left */
@@ -408,8 +452,8 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
     /*** CHUNK_FLAGS ***/
     if(gff) {
         /* PICO-8 format: 1 byte per sprite, bit 0: red, bit 1: orange, yellow, green, blue, purple, pink, bit 7: peach */
-        /* FIXME: should we convert these flags? https://github.com/nesbox/TIC-80/wiki/fset does not tell */
         TICHDR(6, 512);
+        /* FIXME: should we convert these flags? If so, how? https://github.com/nesbox/TIC-80/wiki/fset does not tell */
         memcpy(ptr, gff, 256);
         ptr += n;
         free(gff);
@@ -481,7 +525,7 @@ int main(int argc, char **argv)
 
     /* parse command line */
     if(argc < 2) {
-        printf("p8totic by bzt MIT\r\n\r\n%s <p8|p8.png input> [tic output]\r\n\r\n", argv[0]);
+        printf("p8totic by bzt MIT\r\n\r\n%s <p8|p8.png|tic.png input> [tic output]\r\n\r\n", argv[0]);
         return 1;
     }
     if(argc > 2 && argv[2])
@@ -492,6 +536,7 @@ int main(int argc, char **argv)
         strcpy(fn, argv[1]);
         c = strrchr(fn, '.'); if(c && !strcmp(c, ".png")) *c = 0;
         c = strrchr(fn, '.'); if(c && !strcmp(c, ".p8")) *c = 0;
+        c = strrchr(fn, '.'); if(c && !strcmp(c, ".tic")) *c = 0;
         if(!c) c = fn + strlen(fn);
         strcpy(c, ".tic");
     }
