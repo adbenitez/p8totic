@@ -53,12 +53,12 @@ typedef union {
 } Header;
 #define BITS_IN_BYTE 8
 #define HEADER_BITS 4
-#define HEADER_SIZE (sizeof(Header) * BITS_IN_BYTE / HEADER_BITS)
+#define HEADER_SIZE ((int)sizeof(Header) * BITS_IN_BYTE / HEADER_BITS)
 #define BITCHECK(a,b)       (!!((a) & (1ULL<<(b))))
 #define _BITSET(a,b)        ((a) |= (1ULL<<(b)))
 #define _BITCLEAR(a,b)      ((a) &= ~(1ULL<<(b)))
 static inline void bitcpy(uint8_t* dst, uint32_t to, const uint8_t* src, uint32_t from, uint32_t size) {
-    int i;
+    uint32_t i;
     for(i = 0; i < size; i++, to++, from++)
         BITCHECK(src[from >> 3], from & 7) ? _BITSET(dst[to >> 3], to & 7) : _BITCLEAR(dst[to >> 3], to & 7);
 }
@@ -73,18 +73,61 @@ static inline int32_t ceildiv(int32_t a, int32_t b) { return (a + b - 1) / b; }
 
 /**
  * The default PICO-8 waveforms
+ * To generate defaults, enable this define, then compile and run with `gcc p8totic.c -o p8totic -lm; ./p8totic`
  */
-/* FIXME: add wave patterns, each value one tetrad 2's complement, 32 samples per wave */
-static uint8_t picowave[128] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 0 - sine */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 1 - triangle */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 2 - sawtooth */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 3 - square */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 4 - short square / pulse */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 5 - ringing / organ */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 6 - noise */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00  /* 7 - ringing sine / phaser */
+/*#define GENWAVEFORM*/
+static uint8_t picowave[256] = {
+    0x76, 0x54, 0x32, 0x10, 0xf0, 0x0e, 0xdc, 0xba, 0xba, 0xdc, 0x0e, 0xf0, 0x10, 0x32, 0x54, 0x76, /* 0 - sine */
+    0xba, 0xbc, 0xdc, 0xd0, 0x0e, 0xf0, 0x00, 0x00, 0x10, 0x02, 0x32, 0x34, 0x54, 0x56, 0x30, 0xda, /* 1 - triangle */
+    0x00, 0x10, 0x12, 0x32, 0x34, 0x04, 0x50, 0x06, 0x0a, 0xb0, 0x0c, 0xdc, 0xde, 0xfe, 0xf0, 0x00, /* 2 - sawtooth */
+    0x30, 0x30, 0x30, 0x30, 0xd0, 0xd0, 0xd0, 0xd0, 0xd0, 0xd0, 0xd0, 0xd0, 0x30, 0x30, 0x30, 0x30, /* 3 - square */
+    0x04, 0x04, 0x04, 0x04, 0x04, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, 0x0c, /* 4 - short square / pulse */
+    0x34, 0x12, 0xf0, 0xde, 0xdc, 0xfe, 0xf0, 0x00, 0x00, 0xf0, 0xfe, 0xdc, 0xde, 0xf0, 0x12, 0x34, /* 5 - ringing / organ */
+    0xf0, 0xd0, 0xf0, 0x1e, 0xb0, 0x0e, 0xf0, 0x52, 0xfa, 0x0e, 0xf0, 0xd4, 0x0e, 0x06, 0x34, 0x3a, /* 6 - noise */
+    0x32, 0x12, 0x00, 0xf0, 0xfe, 0xd0, 0xbc, 0xba, 0x0a, 0xbc, 0xd0, 0xfe, 0xf0, 0x00, 0x12, 0x32, /* 7 - ringing sine / phaser */
+
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* 8 to 15 custom generated */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
+
+/**
+ * Generate custom PICO-8 waveforms
+ */
+void pico_genwave(uint8_t *out, uint16_t *in, uint8_t flags, uint8_t speed, uint8_t start, uint8_t end)
+{
+    /* FIXME: calculate waveform */
+
+    /* out: 16 bytes as in picowave, each byte contains 2 values so 32 samples in total, one is -8 to 7, on 4 bits */
+    (void)out;
+    /* in: 32 times:
+     *  bit 0..5: pitch,
+     *  bit 6..8: waveform lower 3 bits (0 to 7 one of the default waveforms, 8 to 15 one of the already generated custom waves),
+     *  bit 9..11: volume,
+     *  bit 12..14: effect (0 none, 1 slide, 2 vibrato, 3 drop, 4 fade in, 5 fade out, 6 arp fast, 7 arp slow),
+     *  bit 15: waveform most significant 4th bit
+     *
+     *  source wave samples: picowave + 16 * (((bit 15) << 3) | (bit 6..8)), apply volume, effects etc. and store into out
+     *  difficulty: can't use math.h, you're limited to integer arithmetic */
+    (void)in;
+    /* flags:
+     *  bit 0: editor mode
+     *  bit 1: noiz
+     *  bit 2: buzz
+     *  bit 3..4: detune
+     *  bit ?..?: reverb
+     *  bit ?..?: dampen */
+    (void)flags;
+    /* speed: in 183 ticks, assuming 22050 ticks per second */
+    (void)speed;
+    /* start, end: loop positions */
+    (void)start; (void)end;
+}
 
 /**
  * The default PICO-8 palette
@@ -152,7 +195,7 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
                     lua = (uint8_t*)malloc(LUAMAX + i + 1);
                     if(!lua) goto err;
                     j = *ptr; *ptr = 0;
-                    /* no need for pico_lua_to_utf(), this is already utf-8 */
+                    /* no need for pico_lua_to_utf8(), this is already utf-8 */
                     /* add the Lua helper library */
                     memcpy(lua, p8totic_lua, i);
                     /* add the converted Lua code */
@@ -327,6 +370,10 @@ uncomp:         free(pixels);
             return -1;
         }
         /****** decode binary format ******/
+        if(w != 160 || h != 205) {
+            free(pixels);
+            return -1;
+        }
         raw = (uint8_t*)malloc(w * h);
         if(!raw) goto err;
         for(f = 0; f < w * h; f++)
@@ -424,9 +471,14 @@ uncomp:         free(pixels);
     memcpy(ptr + 48, picopal, 48);  /* OVR palette */
     ptr += n;
 
-    /** CHUNK_WAVEFORM, add fixed PICO-8 waveforms ***/
+    /** CHUNK_WAVEFORM, add fixed PICO-8 waveforms, and generate the rest ***/
     TICHDR(10, 256);
     memcpy(ptr, picowave, 128);
+    if(snd) {
+        for(i = 0, S = snd; i < 7; i++, S += 68)
+            pico_genwave(picowave + 128 + i * 16, (uint16_t*)S, S[64], S[65], S[66], S[67]);
+        memcpy(ptr + 128, picowave + 128, 128);
+    }
     ptr += n;
 
     /*** CHUNK_DEFAULT, needed otherwise palette and waveforms not loaded ***/
@@ -471,12 +523,7 @@ uncomp:         free(pixels);
     /*** CHUNK_SAMPLES, sound effects ***/
     if(snd) {
         /* PICO-8 format: 64 samples, each 68 bytes: 32 x 2 byte notes, 1 byte flags, 1 byte speed, 1 byte start, 1 byte end */
-        /* one note:
-         *  bit 0..5: pitch,
-         *  bit 6..8: waveform (0 sine, 1 tri, 2 sawtooth, 3 long square, 4 short square, 5 ringing, 6 noise, 7 ringing sine),
-         *  bit 9..11: volume,
-         *  bit 12..14: effect (0 none, 1 slide, 2 vibrato, 3 drop, 4 fade in, 5 fade out, 6 arp fast, 7 arp slow),
-         *  bit 15: waveform is a custom SFX id */
+        /* for details, see comments in pico_genwave() function above */
         TICHDR(9, 4224);
         /* 64 samples, each 66 bytes */
         /* FIXME: not sure how to store these in TIC-80 */
@@ -484,16 +531,16 @@ uncomp:         free(pixels);
             S = snd + j * 68; sn = (uint16_t*)S;
             D = ptr + j * 66; dn = (uint16_t*)D;
             for(i = 0; i < 30; i++) {
-                dn[i] |= ((sn[i] >> 9) & 7) << 1;   /* volume*2 FIXME: is this reversed? */
-                dn[i] |= ((sn[i] >> 6) & 7) << 4;   /* wave */
-                dn[i] |= ((sn[i] >> 0) & 7) << 13;  /* pitch*2 */
-                /* FIXME: what about effect and custom bit? */
+                dn[i] |= (7 - ((sn[i] >> 9) & 7)) << 1;                     /* volume*2 FIXME: is this really reversed? */
+                dn[i] |= (((sn[i] >> 15) << 3) | ((sn[i] >> 6) & 7)) << 4;  /* wave */
+                dn[i] |= ((sn[i] >> 0) & 7) << 13;                          /* pitch*2 */
+                /* FIXME: what about effect? */
             }
             D[60] |= (S[65] & 7) << 4;              /* speed */
             /* makes no sense. this can store max 15, but we have 30 notes. Let's assume they address every even note */
-            e = (D[67] > 30 ? 30 : D[67]) >> 1;     /* loop end */
-            s = (D[66] > 30 ? 30 : D[66]) >> 1;     /* loop start */
-            d = ((e - s) << 1) | s;                 /* we need start and size */
+            e = (S[67] > 30 ? 30 : S[67]) >> 1;     /* loop end */
+            s = (S[66] > 30 ? 30 : S[66]) >> 1;     /* loop start */
+            d = ((e - s) << 4) | s;                 /* we need start and size */
             D[62] = D[63] = D[64] = D[65] = d;      /* loop for wave, volume, arpeggio, pitch */
         }
         ptr += n;
@@ -523,7 +570,7 @@ uncomp:         free(pixels);
         free(mus);
     }
 
-    /*** CHUNK_CODE ***/
+    /*** CHUNK_CODE, this chunk should be the last in the cartridge ***/
     if(lua) {
         s = strlen((const char*)lua) + 1;
         i = 0;
@@ -562,6 +609,32 @@ err:
 }
 
 #ifndef __EMSCRIPTEN__
+
+/* PICO-8 default waveform generation. */
+#ifdef GENWAVEFORM
+#include <math.h>
+/* Waves from https://github.com/egordorichev/pemsa/blob/master/src/pemsa/audio/pemsa_wave_functions.cpp */
+float wave_sine(float t)     { return (fabs(fmod(t, 1.0) * 2.0 - 1.0) * 2 - 1.0); }
+float wave_triangle(float t) { t = fmod(t, 1); return (((t < 0.875) ? (t * 16 / 7) : ((1 - t) * 16)) - 1) * 0.9; }
+float wave_sawtooth(float t) { return 2 * (t - (int) (t + 0.5)); }
+float wave_square(float t)   { return (wave_sine(t) >= 0 ? 1.0 : -1.0) * 0.5; }
+float wave_pulse(float t)    { return (fmod(t, 1) < 0.3125 ? 1 : -1) * 0.7; }
+float wave_organ(float t)    { t *= 4; return (fabs(fmod(t, 2) - 1) - 0.5 + (fabs(fmod(t * 0.5, 2) - 1) - 0.5) / 2.0 - 0.1); }
+float wave_noise(float t)    { return (float)((rand() & 0xffff) - 32768) / (float)32768.0; }
+float wave_phaser(float t)   { t *= 2; return (fabs(fmod(t, 2) - 1) - 0.5f + (fabs(fmod((t * 127 / 128), 2) - 1) - 0.5) / 2) - 0.25; }
+
+typedef float (*wavefunc_t)(float);
+void print_wave(wavefunc_t wavefunc, char *comment) {
+    int i, n; uint8_t tmp[16] = { 0 };
+    printf("    /* check:");
+    for(i = 0; i < 32; i++) {
+        n = (int)((*wavefunc)(i ? (float)i/(float)31 : 0.0) * (float)7.0);
+        tmp[i >> 1] |= (n & 0xF) << ((n & 1) * 4); printf(" %d",n);
+    }
+    printf(" */\r\n   "); for(i = 0; i < 16; i++) { printf(" 0x%02x,", tmp[i]); } printf(" /* %s */\r\n\r\n", comment);
+}
+#endif
+
 /**
  * Command line interface
  */
@@ -575,6 +648,16 @@ int main(int argc, char **argv)
     /* parse command line */
     if(argc < 2) {
         printf("p8totic by bzt MIT\r\n\r\n%s <p8|p8.png|tic.png input> [tic output]\r\n\r\n", argv[0]);
+#ifdef GENWAVEFORM
+        print_wave(wave_sine,     "0 - sine");
+        print_wave(wave_triangle, "1 - triangle");
+        print_wave(wave_sawtooth, "2 - sawtooth");
+        print_wave(wave_square,   "3 - square");
+        print_wave(wave_pulse,    "4 - short square / pulse");
+        print_wave(wave_organ,    "5 - ringing / organ");
+        print_wave(wave_noise,    "6 - noise");
+        print_wave(wave_phaser,   "7 - ringing sine / phaser");
+#endif
         return 1;
     }
     if(argc > 2 && argv[2])

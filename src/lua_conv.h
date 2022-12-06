@@ -55,7 +55,7 @@ const char *pico_utf8[] = {
 int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
 {
     uint8_t *orig = dst, *end = dst + maxlen - 6;
-    int i, j, l;
+    int i, j;
     unsigned int k;
 
     for(i = 0; src[i] && i < srclen && dst < end; i++) {

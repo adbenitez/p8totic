@@ -11,7 +11,6 @@
 int decompress_mini(uint8_t *in_p, uint8_t *out_p, int max_len)
 {
 	char *literal = "^\n 0123456789abcdefghijklmnopqrstuvwxyz!#%(){}[]<>+=/*:;.,~_";
-	int literal_index[256]; // map literals to 0..LITERALS-1. 0 is reserved (not listed in literals string)
 	int block_offset;
 	int block_length;
 	int val;
@@ -84,9 +83,7 @@ int decompress_mini(uint8_t *in_p, uint8_t *out_p, int max_len)
 #define PXA_READ_VAL(x)  getval(8)
 static int bit = 1;
 static int byte = 0;
-static int dest_pos = 0;
 static int src_pos = 0;
-static uint8_t *dest_buf = NULL;
 static uint8_t *src_buf = NULL;
 static int getbit()
 {
@@ -115,7 +112,6 @@ static int getval(int bits)
 }
 static int getchain(int link_bits, int max_bits)
 {
-	int i;
 	int max_link_val = (1 << link_bits) - 1;
 	int val = 0;
 	int vv = max_link_val;
@@ -135,8 +131,6 @@ static int getnum()
 {
 	int jump = BLOCK_DIST_BITS;
 	int bits = jump;
-	int src_pos_0 = src_pos;
-	int bit_0 = bit;
 	int val;
 
 	// 1  15 bits // more frequent so put first
@@ -154,7 +148,6 @@ static int getnum()
 
 int pxa_decompress(uint8_t *in_p, uint8_t *out_p, int max_len)
 {
-	uint8_t *dest;
 	int i;
 	int literal[256];
 	int literal_pos[256];

@@ -14,11 +14,13 @@ Features
 - Cover image (128 x 128 cartridge label, centered on the 240 x 136 screen)
 - Sprites (all 256, saved as background sprites, aka. tiles)
 - Map (the map is expanded from 128 x 64 to 240 x 136 and copied to the top left corner)
-- Lua code (with syntax fixer, API replacer and an additional helper [PICO-8 wrapper for TIC-80](https://github.com/musurca/pico2tic) Lua library)
 - Palette, the standard PICO-8 palette is added to the cartridge (TIC-80 supports multiple, modifiable palettes)
+- Waveforms, the built-in PICO-8 waveforms are added to the cartridge
+- Sound effects (partial support)
+- Lua code (with syntax fixer, API replacer and an additional helper [PICO-8 wrapper for TIC-80](https://github.com/musurca/pico2tic) Lua library)
 
-**TODO**: sound effects and music are loaded, but not saved as of yet. Contributions (or just any kind of help) from someone
-familiar with the TIC-80 sfx (address [0x100E4](https://github.com/nesbox/TIC-80/wiki/RAM#sfx)) and music (address
+**TODO**: sound effects and music are loaded, but not saved properly as of yet. Contributions (or just any kind of help) from
+someone familiar with the TIC-80 sfx (address [0x100E4](https://github.com/nesbox/TIC-80/wiki/RAM#sfx)) and music (address
 [0x11164](https://github.com/nesbox/TIC-80/wiki/RAM#music-patters) and [0x13E64](https://github.com/nesbox/TIC-80/wiki/RAM#music-tracks))
 in-memory layout would be much appreciated!
 
