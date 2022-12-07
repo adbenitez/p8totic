@@ -237,7 +237,7 @@ int tok_new(tok_t *tok, char ***rules, char *src, int len)
             if(src[k] == '(') { t[nt++] = (k << 4) | 5; k++; continue; }
             j = 0; if(r[5]) for(i = 0; r[5][i]; i++) if(r[5][i][0] == src[k]) { j = 1; break; }
             if(src[k] == ')' || src[k] == ' ' || src[k] == '\t' || src[k] == '\r' || src[k] == '\n' || j) {
-                if(!nt || (t[nt - 1] & 0xf) != 5 || src[k] == ',') t[nt++] = (k << 4) | 5;
+                if(!nt || (t[nt - 1] & 0xf) != 5 || src[k] == ',' || src[k] == ')') t[nt++] = (k << 4) | 5;
                 k++; continue;
             }
             for(m = 0; m < 4; m++)
@@ -477,6 +477,8 @@ int tok_next(tok_t *tok, int idx, char type, char *str)
     if(!tok || !tok->tokens || idx < 0 || idx >= tok->num || type < -1 || type > 9) return -1;
     for(i = idx; i < tok->num; i++)
         if(tok->tokens[i]) {
+            if(!p && !s && !b && ((type == -1 || tok->tokens[i][0] == type) && (str == NULL || !TOK_STRCMP(tok->tokens[i] + 1, str))))
+                return i;
             /* skip string literals */
             if(tok->tokens[i][0] != 4) {
                 for(j = 1; tok->tokens[i][j]; j++) {
@@ -487,9 +489,8 @@ int tok_next(tok_t *tok, int idx, char type, char *str)
                     if(tok->tokens[i][j] == '[') b++;
                     if(tok->tokens[i][j] == ']') b--;
                 }
+                if(p < 0 || s < 0 || b < 0) return -1;
             }
-            if(!p && !s && !b && ((type == -1 || tok->tokens[i][0] == type) && (str == NULL || !TOK_STRCMP(tok->tokens[i] + 1, str))))
-                return i;
         }
     return -1;
 }

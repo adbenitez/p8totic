@@ -92,7 +92,7 @@ char **lua_rules[] = { lua_com, NULL, lua_ops, lua_num, lua_str, lua_sep, lua_ty
 static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
 {
     tok_t tok;
-    int i, j, len;
+    int i, j, k, len;
 
     /* tokenize Lua string */
     if(!tok_new(&tok, lua_rules, src, srclen)) {
@@ -129,6 +129,14 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             /* replace dget and dset with pmem */
             if(!strcmp(tok.tokens[i] + 1, "dget") || !strcmp(tok.tokens[i] + 1, "dset"))
                 strcpy(tok.tokens[i] + 1, "pmem");
+            /* remove cartdata() */
+            if(!strcmp(tok.tokens[i] + 1, "cartdata")) {
+                j = tok_next(&tok, i + 2, TOK_SEPARATOR, ")");
+                if(j > i) {
+                    for(; j >= i; j--)
+                        tok_delete(&tok, i);
+                }
+            }
             /* replace shr() and shl() functions with infix operators, like "shl(a,b)" -> "(a<<b)" */
             if(!strcmp(tok.tokens[i] + 1, "shl") || !strcmp(tok.tokens[i] + 1, "shr")) {
                 j = tok_next(&tok, i + 2, TOK_SEPARATOR, ",");
@@ -137,6 +145,19 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                     tok_delete(&tok, i);
                 }
             }
+            /* replace music(track,...) -> music(track) (the other arguments not supported on TIC-80) */
+            if(!strcmp(tok.tokens[i] + 1, "music")) {
+                j = tok_next(&tok, i + 2, TOK_SEPARATOR, ",");
+                if(j > i) {
+                    k = tok_next(&tok, j, TOK_SEPARATOR, ")");
+                    if(k > j) {
+                        for(k -= j; k; k--)
+                            tok_delete(&tok, j);
+                    }
+                }
+            }
+            /* replace mapdraw() -> map() */
+            if(!strcmp(tok.tokens[i] + 1, "mapdraw")) tok_replace(&tok, i, TOK_FUNCTION, "map");
             /* replace math functions */
             if(!strcmp(tok.tokens[i] + 1, "srand")) tok_replace(&tok, i, TOK_FUNCTION, "math.randomseed");
             if(!strcmp(tok.tokens[i] + 1, "sqrt"))  tok_replace(&tok, i, TOK_FUNCTION, "math.sqrt");
@@ -204,17 +225,22 @@ char p8totic_lua[] =
 "__sfx=sfx\n"
 "function sfx(n,channel,offset)\n"
 /*" --does not support offset as of 0.18.0\n"*/
-"	if n<0 then\n"
-"	 __sfx(0,28,channel,0)\n"
+"	if n==-2 then\n"
+"	 __sfx(-1)\n"
 "	else\n"
-"	 __sfx(0,28,channel)\n"
+"	if n==-1 then\n"
+"	 __sfx(-1,nil,nil,channel)\n"
+"	else\n"
+"	 __sfx(n,28,-1,channel)\n"
 "	end\n"
 "end\n"
 "\n"
+/*
 "function music(n,fadems,channelmask)\n"
-/*" --do nothing as of 0.18.0\n"*/
+" --do nothing as of 0.18.0\n"
 "end\n"
 "\n"
+*/
 /*"--utility\n"*/
 "function stat(i)\n"
 " if i==0 then\n"
@@ -229,11 +255,11 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 /*"--permanent cart mem\n"*/
+/*
 "function cartdata(id)\n"
-/*" --do nothing\n"*/
+" --do nothing\n"
 "end\n"
 "\n"
-/*
 "function dget(i)\n"
 " return pmem(i)\n"
 "end\n"
@@ -532,8 +558,10 @@ char p8totic_lua[] =
 "	\n"
 /*"	--__map(cel_x,cel_y,cel_w,cel_h,sx,sy,__p8_ctrans)\n"*/
 "end\n"
+/*
 "mapdraw=map\n"
 "\n"
+*/
 "function sset(x,y,c) \n"
 " x,y=math.floor(x),math.floor(y)\n"
 "	local addr=0x8000+64*(math.floor(x/8)+math.floor(y/8)*16)\n"
