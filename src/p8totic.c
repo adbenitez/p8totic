@@ -33,6 +33,7 @@
 #include <stdio.h>
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
+#define STBI_ONLY_GIF
 #define STBI_NO_LINEAR
 #define STBI_NO_HDR
 #define STBI_NO_JPEG
@@ -41,12 +42,18 @@
 #define STBI_NO_STDIO
 #define STBI_ASSERT(x)
 #include "stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBI_WRITE_ONLY_PNG
+#define STBI_WRITE_NO_FAILURE_STRINGS
+#define STBI_WRITE_NO_SIMD
+#define STBI_WRITE_NO_STDIO
+#include "stb_image_write.h"
 
 #include "lua_conv.h"   /* Lua converter and helper lib, PICO-8 wrapper by musurca */
 #include "lua_infl.h"   /* PICO-8 compressed code section inflater by lexaloffle */
 #define LUAMAX 524288   /* biggest Lua code we can handle */
 
-/* stuff needed to decrypt a TIC-80 png cartridge, from src/ext/png.c (see https://github.com/nesbox/TIC-80) */
+/* stuff needed to decrypt/encrypt a TIC-80 png cartridge, from src/ext/png.c (see https://github.com/nesbox/TIC-80) */
 typedef union {
     struct { uint32_t bits:8; uint32_t size:24; };
     uint8_t data[4];
@@ -54,6 +61,9 @@ typedef union {
 #define BITS_IN_BYTE 8
 #define HEADER_BITS 4
 #define HEADER_SIZE ((int)sizeof(Header) * BITS_IN_BYTE / HEADER_BITS)
+#define MIN(a,b)            ((a) < (b) ? (a) : (b))
+#define MAX(a,b)            ((a) > (b) ? (a) : (b))
+#define CLAMP(v,a,b)        (MIN(MAX(v,a),b))
 #define BITCHECK(a,b)       (!!((a) & (1ULL<<(b))))
 #define _BITSET(a,b)        ((a) |= (1ULL<<(b)))
 #define _BITCLEAR(a,b)      ((a) &= ~(1ULL<<(b)))
@@ -608,6 +618,110 @@ err:
     return 0;
 }
 
+/* things needed for creating a PNG cartridge */
+const stbi_uc cartpng[] = {
+#include "cart.png.dat"
+};
+static uint8_t cartfnt[] = {
+#include "font.inl"
+};
+static uint8_t Sweetie16[] = { 0x1a, 0x1c, 0x2c, 0x5d, 0x27, 0x5d, 0xb1, 0x3e, 0x53, 0xef, 0x7d, 0x57, 0xff, 0xcd, 0x75, 0xa7, 0xf0,
+ 0x70, 0x38, 0xb7, 0x64, 0x25, 0x71, 0x79, 0x29, 0x36, 0x6f, 0x3b, 0x5d, 0xc9, 0x41, 0xa6, 0xf6, 0x73, 0xef, 0xf7, 0xf4, 0xf4, 0xf4,
+ 0x94, 0xb0, 0xc2, 0x56, 0x6c, 0x86, 0x33, 0x3c, 0x57};
+void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen);
+void drawtext(uint8_t *dst, int dw, int dh, uint32_t c, int x, int y, int w, uint8_t *str)
+{
+    int i, j, k, p = dw * 4, p2 = 2 * p, s, e;
+    uint8_t *fnt, *pix = dst + (y * dw + x) * 4, *row;
+
+    if(!dst || dw < 1 || dh < 1 || x < 0 || y < 0 || w < 1 || !str) return;
+    for(; *str >= ' ' && *str < 128 && x < w; str++, x += (k + 1) * 2, pix += (k + 1) * 8) {
+        if(*str == ' ') { k = 3; continue; }
+        fnt = cartfnt + *str * 8;
+        for(i = e = 0, s = 7; i < 8; i++)
+            for(j = 0; j < 8; j++) if(fnt[j] & (1 << i)) { if(i < s) { s = i; } if(i > e) { e = i; } }
+        k = e - s + 1;
+        for(j = 0; j < 8; j++, fnt++)
+            for(row = pix + j * p2, i = 0; i < k && x + i + i < w; i++, row += 8)
+                if(*fnt & (1 << (s + i))) {
+                    *((uint32_t*)row) = *((uint32_t*)(row + 4)) = *((uint32_t*)(row + p)) = *((uint32_t*)(row + p + 4)) = c;
+                    *((uint32_t*)(row + p2)) = *((uint32_t*)(row + p2 + 4)) =
+                        *((uint32_t*)(row + p2 + p)) = *((uint32_t*)(row + p2 + p + 4)) = 0xff2c1c1a;
+                }
+    }
+}
+
+/**
+ * Public API to create a TIC-80 PNG cartridge from a .tic file
+ */
+int tictopng(uint8_t *buf, int size, uint8_t *out, int maxlen)
+{
+    Header header = { 0 };
+    int w = 0, h = 0, l = 0, f, i, j, s, n;
+    uint8_t *ptr, *comp, *pixels = NULL, *raw = NULL, *pal = Sweetie16, *lbl = NULL, *tit = NULL, *ath = NULL;
+
+    if(!buf || size < 1 || !out || maxlen < 1) return 0;
+    memset(out, 0, maxlen);
+
+    /* compress .tic */
+    comp = stbi_zlib_compress(buf, size, &s, 9);
+    if(!comp) return 0;
+    comp = (uint8_t*)realloc(comp, s + HEADER_SIZE);
+    if(!comp) return 0;
+    memmove(comp + HEADER_SIZE, comp, s);
+
+    /* get the cover image background */
+    pixels = stbi_load_from_memory(cartpng, sizeof(cartpng), &w, &h, &f, 4);
+    header.bits = CLAMP(ceildiv(s * BITS_IN_BYTE, w * h * 4 - HEADER_SIZE), 1, BITS_IN_BYTE); header.size = s;
+    memcpy(comp, &header, sizeof(Header));
+
+    /* parse the .tic, look for cover image, palette and cartridge labels */
+    tit = memmem(buf, size, " title:", 7); if(tit) for(tit += 7; *tit == ' '; tit++);
+    ath = memmem(buf, size, " author:", 8); if(ath) for(ath += 8; *ath == ' '; ath++);
+    for(ptr = buf, raw = NULL; ptr < buf + size - 4; ptr += (ptr[1] | (ptr[2] << 8)) + 4)
+        switch(ptr[0] & 0x1F) {
+            case 12: pal = ptr + 4; break;
+            case 18: if(!(ptr[0] >> 5) && !lbl) { lbl = ptr + 4; l = ptr[1] | (ptr[2] << 8); } break;
+            case 3:
+                raw = stbi_load_from_memory(ptr + 4, ptr[1] | (ptr[2] << 8), &s, &n, &f, 4);
+                if(raw) {
+                    for(j = 0; j < n; j++)
+                        memcpy(pixels + ((j + 8) * w + 8) * 4, raw + j * s * 4, s * 4);
+                    free(raw);
+                }
+            break;
+        }
+    /* if there was no cover image, but we have a screen chunk, use that */
+    if(!raw && lbl)
+        for(j = n = 0; j < 136; j++) {
+            ptr = pixels + ((j + 8) * w + 8) * 4;
+            for(i = 0; i < 120 && n < l; i++, n++, ptr += 8) {
+                memcpy(ptr, &pal[(lbl[n] & 0xf) * 3], 3);
+                memcpy(ptr + 4, &pal[((lbl[n] >> 4) & 0xf) * 3], 3);
+            }
+        }
+
+    /* add title and author */
+    if(tit) drawtext(pixels, w, h, 0xfff5f4f4, 16, 162, 240, tit);
+    if(ath) {
+        drawtext(pixels, w, h, 0xff876d56, 16, 186, 240, (uint8_t*)"by");
+        drawtext(pixels, w, h, 0xff876d56, 48, 186, 240, ath);
+    }
+
+    /* do the steganography. This code is (mostly) from png_encode() in TIC-80/src/ext/png.c */
+    for (i = 0; i < HEADER_SIZE; i++)
+        bitcpy(pixels, i << 3, header.data, i * HEADER_BITS, HEADER_BITS);
+    for(n = ceildiv(header.size * BITS_IN_BYTE, header.bits), i = 0; i < n; i++)
+        bitcpy(pixels + HEADER_SIZE, i << 3, comp + HEADER_SIZE, i * header.bits, header.bits);
+
+    /* write out png */
+    stbi_write_png_compression_level = 9;
+    raw = stbi_write_png_to_mem((unsigned char*)pixels, w * 4, w, h, 4, &f, comp, header.size + HEADER_SIZE);
+    free(pixels);
+    if(raw) { if(f > maxlen) { f = maxlen; } memcpy(out, raw, f); free(raw); return f; }
+    return 0;
+}
+
 #ifndef __EMSCRIPTEN__
 
 /* PICO-8 default waveform generation. */
@@ -647,7 +761,7 @@ int main(int argc, char **argv)
 
     /* parse command line */
     if(argc < 2) {
-        printf("p8totic by bzt MIT\r\n\r\n%s <p8|p8.png|tic.png input> [tic output]\r\n\r\n", argv[0]);
+        printf("p8totic by bzt MIT\r\n\r\n%s <p8|p8.png|tic.png|tic input> [tic|tic.png output]\r\n\r\n", argv[0]);
 #ifdef GENWAVEFORM
         print_wave(wave_sine,     "0 - sine");
         print_wave(wave_triangle, "1 - triangle");
@@ -685,15 +799,20 @@ int main(int argc, char **argv)
         if(fread(buf, 1, size, f) != size) size = 0;
         fclose(f);
     }
-    if(!buf || size < 1 || (memcmp(buf, "pico-8", 6) && memcmp(buf, "\x89PNG", 4))) {
-        fprintf(stderr, "p8topic: unable to read '%s' or it is not a PICO-8 cartridge\r\n", argv[1]);
+    if(!buf || size < 1) {
+        fprintf(stderr, "p8topic: unable to read '%s'\r\n", argv[1]);
         exit(1);
     }
     out = (uint8_t*)malloc(1024*1024);
     if(!buf) { fprintf(stderr, "p8totic: unable to allocate memory\r\n"); exit(1); }
 
     /* do the thing */
-    size = p8totic(buf, size, out, 1024*1024);
+    c = strrchr(argv[1], '.');
+    if(c && !strcmp(c, ".tic")) {
+        if(fn != argv[2]) strcat(fn, ".png");
+        size = tictopng(buf, size, out, 1024*1024);
+    } else
+        size = p8totic(buf, size, out, 1024*1024);
     if(size < 1) {
         fprintf(stderr, "p8topic: unable to generate TIC-80 cartridge\r\n");
         exit(1);

@@ -6,7 +6,8 @@ PICO-8 to TIC-80 cartridge converter
 This is a small tool that converts the proprietary [PICO-8](https://www.lexaloffle.com/pico-8.php) fantasy console's
 cartridges (in both textual `.p8` and binary `.p8.png` format) into the Free and Open Source [TIC-80](https://tic80.com)
 console's [.tic](https://github.com/nesbox/TIC-80/wiki/.tic-File-Format) cartridge format, and tries to be feature complete
-while doing so. As a bonus, it can extract `.tic` from TIC-80 `.tic.png` cartridges too.
+while doing so. As a bonus, it can extract `.tic` from TIC-80 `.tic.png` cartridges too, and if the input is a `.tic` file,
+then outputs `.tic.png`.
 
 Features
 --------
