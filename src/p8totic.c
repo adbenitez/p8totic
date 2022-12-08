@@ -360,7 +360,7 @@ int p8totic(uint8_t *buf, int size, uint8_t *out, int maxlen)
             /* first, let's see if it has a cartridge chunk */
             for(raw = buf + 8; raw < buf + size - 12; raw += n + 12) {
                 n = ((raw[0] << 24) | (raw[1] << 16) | (raw[2] << 8) | raw[3]);
-                if(!memcmp(raw + 4, "caRt", 4)) { raw += 12; goto uncomp; }
+                if(!memcmp(raw + 4, "caRt", 4)) { raw += 8; goto uncomp; }
             }
             /* nope, fallback to steganography. This code is (mostly) from png_decode() in TIC-80/src/ext/png.c */
             for (i = 0; i < HEADER_SIZE; i++)
@@ -668,12 +668,10 @@ int tictopng(uint8_t *buf, int size, uint8_t *out, int maxlen)
     if(!comp) return 0;
     comp = (uint8_t*)realloc(comp, s + HEADER_SIZE);
     if(!comp) return 0;
-    memmove(comp + HEADER_SIZE, comp, s);
 
     /* get the cover image background */
     pixels = stbi_load_from_memory(cartpng, sizeof(cartpng), &w, &h, &f, 4);
     header.bits = CLAMP(ceildiv(s * BITS_IN_BYTE, w * h * 4 - HEADER_SIZE), 1, BITS_IN_BYTE); header.size = s;
-    memcpy(comp, &header, sizeof(Header));
 
     /* parse the .tic, look for cover image, palette and cartridge labels */
     tit = memmem(buf, size, " title:", 7); if(tit) for(tit += 7; *tit == ' '; tit++);
@@ -712,11 +710,11 @@ int tictopng(uint8_t *buf, int size, uint8_t *out, int maxlen)
     for (i = 0; i < HEADER_SIZE; i++)
         bitcpy(pixels, i << 3, header.data, i * HEADER_BITS, HEADER_BITS);
     for(n = ceildiv(header.size * BITS_IN_BYTE, header.bits), i = 0; i < n; i++)
-        bitcpy(pixels + HEADER_SIZE, i << 3, comp + HEADER_SIZE, i * header.bits, header.bits);
+        bitcpy(pixels + HEADER_SIZE, i << 3, comp, i * header.bits, header.bits);
 
     /* write out png */
     stbi_write_png_compression_level = 9;
-    raw = stbi_write_png_to_mem((unsigned char*)pixels, w * 4, w, h, 4, &f, comp, header.size + HEADER_SIZE);
+    raw = stbi_write_png_to_mem((unsigned char*)pixels, w * 4, w, h, 4, &f, comp, header.size);
     free(pixels);
     if(raw) { if(f > maxlen) { f = maxlen; } memcpy(out, raw, f); free(raw); return f; }
     return 0;
