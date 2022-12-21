@@ -22,7 +22,9 @@
     <script>document.getElementById("jserr").style.display = "none";</script>
     <p>This is a <i>Free and Open Source</i> tool, licensed under the <i>MIT license</i> and written in ANSI C. It's aching to be
     feature complete, therefore it is able to convert assets, PICO-8 codepage, <b>Lua syntax</b> (like <tt>+=</tt> and <tt>!=</tt>
-    operators for example) and <b>API calls</b> too. Check out its <a href="https://gitlab.com/bztsrc/p8totic">source</a>.
+    operators for example) and <b>API calls</b> too (what's not converted directly, provided via
+    <a href="https://github.com/musurca/pico2tic" target="new">musurca's wrapper</a> library).
+    Check out the converter's <a href="https://gitlab.com/bztsrc/p8totic">source</a>.
     Contributions and improvements are always welcome!</p>
     <input type="file" id="input" onchange="getfile()"><br>
     <small>If the input is a <samp>.p8</samp> text file or a <samp>.p8.png</samp> binary file or a <samp>.tic.png</samp>, then the output is a <samp>.tic</samp> file.<br>
