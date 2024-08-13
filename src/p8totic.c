@@ -475,6 +475,9 @@ uncomp:         free(pixels);
         free(lbl);
     }
 
+    /*** CHUNK_DEFAULT, needed otherwise palette and waveforms not loaded ***/
+    TICHDR(17, 0);
+
     /*** CHUNK_PALETTE, add a fixed PICO-8 palette ***/
     TICHDR(12, 96);
     memcpy(ptr, picopal, 48);       /* SCN palette */
@@ -491,9 +494,6 @@ uncomp:         free(pixels);
     }
     ptr += n;
 
-    /*** CHUNK_DEFAULT, needed otherwise palette and waveforms not loaded ***/
-    TICHDR(17, 0);
-
     /*** CHUNK_TILES / sprites 0 - 255 ***/
     if(gfx) {
         TICHDR(1, 256 * 32);
@@ -501,10 +501,8 @@ uncomp:         free(pixels);
         /* unlike PICO-8, the TIC-8 stores the sprites as an array, each 32 bytes, separate 8 x 8 x 4 bit images */
         for(e = 0; e < 256; e++) {                  /* foreach sprite */
             s = 512 * (e >> 4) + 4 * (e & 15);      /* top left pixel on sprite sheet */
-            for(j = 0; j < 8; j++, s += 64)         /* foreach row 8 */
-                for(i = 0; i < 4; i++, raw++)       /* for every two pixels 2*4 = 8 */
-                    /* PICO-8 uses most significant tetrad on the left, but TIC-80 uses least significant on the left */
-                    *raw = ((gfx[s + i] >> 4) & 0xf) | ((gfx[s + i] & 0xf) << 4);
+            for(j = 0; j < 8; j++, s += 64, raw += 4)/* foreach row 8 */
+                memcpy(raw, gfx + s, 4);
         }
         ptr += n;
         free(gfx);

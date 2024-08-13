@@ -92,7 +92,8 @@ char **lua_rules[] = { lua_com, NULL, lua_ops, lua_num, lua_str, lua_sep, lua_ty
 static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
 {
     tok_t tok;
-    int i, j, k, len;
+    int i, j, k, l, len;
+    char tmp[256];
 
     /* tokenize Lua string */
     if(!tok_new(&tok, lua_rules, src, srclen)) {
@@ -123,6 +124,28 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             tok_insert(&tok, i + 2, TOK_VARIABLE, tok.tokens[i] + 1);
             tok.tokens[i + 1][1] = '='; tok.tokens[i + 1][2] = 0;
             tok.tokens[i + 3][2] = 0;
+        }
+        /* replace "if(expr) cmd" with "if(expr) then cmd end" */
+        if(tok_match(&tok, i, 2, TOK_KEYWORD, TOK_SEPARATOR) && !strcmp(tok.tokens[i] + 1, "if") &&
+          ((i + 1 < tok.num && tok.tokens[i + 1][1] == '(') || (i + 2 < tok.num && tok.tokens[i + 2][1] == '('))) {
+            j = i + (tok.tokens[i + 1][1] == '(' ? 2 : 3);
+            k = tok_next(&tok, j, TOK_SEPARATOR, ")");
+            if(k < 0) k = tok_next(&tok, j, TOK_SEPARATOR, ") ");
+            if(k > i && k + 1 < tok.num && (tok.tokens[k + 1][0] != TOK_KEYWORD || strcmp(tok.tokens[k + 1] + 1, "then"))) {
+                /* add "then" */
+                tok_insert(&tok, k + 1, TOK_KEYWORD, "then ");
+                /* find next token with a newline character */
+                for(j = k + 2; j < tok.num && !strchr(tok.tokens[j] + 1, '\n'); j++);
+                if(j < tok.num) {
+                    /* find newline character and insert "end" before */
+                    for(k = 1, l = 0; l < 255 && tok.tokens[j][k]; k++, l++) {
+                        if(tok.tokens[j][k] == '\n') { memcpy(tmp + l, " end", 4); l += 4; }
+                        tmp[l] = tok.tokens[j][k];
+                    }
+                    tmp[l] = 0;
+                    tok_replace(&tok, j, tok.tokens[j][0], tmp);
+                }
+            }
         }
         /*** API function name changes ***/
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_FUNCTION) {
@@ -165,7 +188,8 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             if(!strcmp(tok.tokens[i] + 1, "min"))   tok_replace(&tok, i, TOK_FUNCTION, "math.min");
             if(!strcmp(tok.tokens[i] + 1, "max"))   tok_replace(&tok, i, TOK_FUNCTION, "math.max");
             if(!strcmp(tok.tokens[i] + 1, "flr"))   tok_replace(&tok, i, TOK_FUNCTION, "math.floor");
-            if(!strcmp(tok.tokens[i] + 1, "rnd"))   tok_replace(&tok, i, TOK_FUNCTION, "math.random()*");
+            if(!strcmp(tok.tokens[i] + 1, "rnd"))   tok_replace(&tok, i, TOK_FUNCTION,
+                i + 3 < tok.num && tok.tokens[i + 2][1] == ')' && tok.tokens[i + 3][1] == '*' ? "math.random" : "math.random()*");
         }
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_VARIABLE) {
             if(!strcmp(tok.tokens[i] + 1, "pi"))    tok_replace(&tok, i, TOK_VARIABLE, "math.pi");
