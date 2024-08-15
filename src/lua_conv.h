@@ -75,7 +75,7 @@ int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
 
 /* configure lua token types here */
 char *lua_com[] = { "\\-\\-.*?$", NULL };
-char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|!][:=]?", NULL };
+char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "\\.\\.=", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|\\\\!][:=]?", NULL };
 char *lua_num[] = { "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
 char *lua_str[] = { "\"", "\'", NULL };
 char *lua_sep[] = { "[", "]", "{", "}", ",", ";", ":", NULL };
@@ -93,7 +93,7 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
 {
     tok_t tok;
     int i, j, k, l, len;
-    char tmp[256];
+    char tmp[256], *c;
 
     /* tokenize Lua string */
     if(!tok_new(&tok, lua_rules, src, srclen)) {
@@ -111,19 +111,18 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_OPERATOR && tok.tokens[i][1] == '!' && tok.tokens[i][2] == '=' &&
           !tok.tokens[i][3]) tok.tokens[i][1] = '~';
         /* convert shorthand operators, like "var +=" -> "var = var +" */
-        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR) && tok.tokens[i + 2][2] == '=' &&
-          !tok.tokens[i + 2][3] && strchr("+-*/%&^", tok.tokens[i + 2][1])) {
-            tok_insert(&tok, i + 3, TOK_OPERATOR, tok.tokens[i + 2] + 1);
-            tok_insert(&tok, i + 3, TOK_VARIABLE, tok.tokens[i] + 1);
-            tok.tokens[i + 2][1] = '='; tok.tokens[i + 2][2] = 0;
-            tok.tokens[i + 4][2] = 0;
+        j = 0;
+        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1;
+        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR)) j = i + 2;
+        if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && strchr(tok.tokens[j] + 1, '=')) {
+            tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
+            tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
+            tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
+            c = strchr(tok.tokens[j + 2] + 1, '='); *c = 0;
         }
-        if(tok_match(&tok, i, 2, TOK_VARIABLE, TOK_OPERATOR) && tok.tokens[i + 1][2] == '=' && !tok.tokens[i + 1][3] &&
-          strchr("+-*/%&^", tok.tokens[i + 1][1])) {
-            tok_insert(&tok, i + 2, TOK_OPERATOR, tok.tokens[i + 1] + 1);
-            tok_insert(&tok, i + 2, TOK_VARIABLE, tok.tokens[i] + 1);
-            tok.tokens[i + 1][1] = '='; tok.tokens[i + 1][2] = 0;
-            tok.tokens[i + 3][2] = 0;
+        /* replace "\" with "//" */
+        if(tok.tokens[i][0] == TOK_OPERATOR && !strcmp(tok.tokens[i] + 1, "\\")) {
+            tok_replace(&tok, i, TOK_OPERATOR, "//");
         }
         /* replace "if(expr) cmd" with "if(expr) then cmd end" */
         if(tok_match(&tok, i, 2, TOK_KEYWORD, TOK_SEPARATOR) && !strcmp(tok.tokens[i] + 1, "if") &&
