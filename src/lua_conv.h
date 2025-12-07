@@ -130,19 +130,24 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             j = i + (tok.tokens[i + 1][1] == '(' ? 2 : 3);
             k = tok_next(&tok, j, TOK_SEPARATOR, ")");
             if(k < 0) k = tok_next(&tok, j, TOK_SEPARATOR, ") ");
-            if(k > i && k + 1 < tok.num && (tok.tokens[k + 1][0] != TOK_KEYWORD || strcmp(tok.tokens[k + 1] + 1, "then"))) {
-                /* add "then" */
-                tok_insert(&tok, k + 1, TOK_KEYWORD, "then ");
-                /* find next token with a newline character */
-                for(j = k + 2; j < tok.num && !strchr(tok.tokens[j] + 1, '\n'); j++);
-                if(j < tok.num) {
-                    /* find newline character and insert "end" before */
-                    for(k = 1, l = 0; l < 255 && tok.tokens[j][k]; k++, l++) {
-                        if(tok.tokens[j][k] == '\n') { memcpy(tmp + l, " end", 4); l += 4; }
-                        tmp[l] = tok.tokens[j][k];
+            if(k > i && k + 1 < tok.num) {
+                for(l = k + 1; l < tok.num && (tok.tokens[l][0] != TOK_KEYWORD || strcmp(tok.tokens[l] + 1, "then")); l++)
+                    if(strchr(tok.tokens[l] + 1, '\n')) { l = 0; break; }
+                /* if there was no "then" before the newline */
+                if(!l) {
+                    /* add "then" */
+                    tok_insert(&tok, k + 1, TOK_KEYWORD, "then ");
+                    /* find next token with a newline character */
+                    for(j = k + 2; j < tok.num && !strchr(tok.tokens[j] + 1, '\n'); j++);
+                    if(j < tok.num) {
+                        /* find newline character and insert "end" before */
+                        for(k = 1, l = 0; l < 255 && tok.tokens[j][k]; k++, l++) {
+                            if(tok.tokens[j][k] == '\n') { memcpy(tmp + l, " end", 4); l += 4; }
+                            tmp[l] = tok.tokens[j][k];
+                        }
+                        tmp[l] = 0;
+                        tok_replace(&tok, j, tok.tokens[j][0], tmp);
                     }
-                    tmp[l] = 0;
-                    tok_replace(&tok, j, tok.tokens[j][0], tmp);
                 }
             }
         }
