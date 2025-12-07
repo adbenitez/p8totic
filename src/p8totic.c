@@ -581,13 +581,13 @@ uncomp:         free(pixels);
     /*** CHUNK_CODE, this chunk should be the last in the cartridge ***/
     if(lua) {
         s = strlen((const char*)lua) + 1;
-        i = 0;
+        i = 0; j = s / 65535;
         /* write out into 64k banks */
         while(s > 65535) {
-            TICHDR((i << 5) | 5, 65535);
+            TICHDR((j << 5) | 5, 65535);
             memcpy(ptr, lua + i * 65535, n);
             ptr += n;
-            s -= n; i++;
+            s -= n; i++; j--;
             if(i > 7) {
                 fprintf(stderr, "p8totic: too many code banks, only 8 supported\r\n");
                 goto err;
@@ -595,7 +595,7 @@ uncomp:         free(pixels);
         }
         /* remaining */
         if(s > 0) {
-            TICHDR((i << 5) | 5, s);
+            TICHDR(5, s);
             memcpy(ptr, lua + i * 65535, n);
             ptr += n;
         }

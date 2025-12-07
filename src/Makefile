@@ -3,7 +3,7 @@ CFLAGS=-Wall -Wextra -O3
 all: cli wasm
 
 wasm: p8totic.c
-	emcc -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_FUNCTIONS='["_p8totic","_tictopng","_malloc","_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' $(CFLAGS) p8totic.c -o ../public/p8totic.js
+	emcc -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_FUNCTIONS='["_p8totic","_tictopng","_malloc","_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8"]' $(CFLAGS) p8totic.c -o ../public/p8totic.js
 
 cli: p8totic.c
 ifneq ("$(wildcard /bin/*.exe)","")
