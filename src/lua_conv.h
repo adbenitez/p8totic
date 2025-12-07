@@ -305,7 +305,12 @@ char p8totic_lua[] =
 "  return function() i = i + 1; return list[i] end\n"
 "end\n"
 "\n"
-"count=table.getn\n"
+/*"count=table.getn\n"*/
+"function count(T)\n"
+"	local len = 0\n"
+"	for _ in pairs(T) do len = len + 1 end\n"
+"	return len\n"
+"end\n"
 "\n"
 "function del(t,a)\n"
 "	for i,v in ipairs(t) do\n"
