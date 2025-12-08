@@ -92,7 +92,7 @@ char **lua_rules[] = { lua_com, NULL, lua_ops, lua_num, lua_str, lua_sep, lua_ty
 static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
 {
     tok_t tok;
-    int i, j, k, l, len;
+    int i, j, k, l, m, len;
     char tmp[256], *c;
 
     /* tokenize Lua string */
@@ -141,8 +141,8 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                     for(j = k + 2; j < tok.num && !strchr(tok.tokens[j] + 1, '\n'); j++);
                     if(j < tok.num) {
                         /* find newline character and insert "end" before */
-                        for(k = 1, l = 0; l < 255 && tok.tokens[j][k]; k++, l++) {
-                            if(tok.tokens[j][k] == '\n') { memcpy(tmp + l, " end", 4); l += 4; }
+                        for(k = 1, l = m = 0; l < 255 && tok.tokens[j][k]; k++, l++) {
+                            if(!m && tok.tokens[j][k] == '\n') { memcpy(tmp + l, " end", 4); l += 4; m = 1; }
                             tmp[l] = tok.tokens[j][k];
                         }
                         tmp[l] = 0;
@@ -185,6 +185,8 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             }
             /* replace mapdraw() -> map() */
             if(!strcmp(tok.tokens[i] + 1, "mapdraw")) tok_replace(&tok, i, TOK_FUNCTION, "map");
+            /* replace misc functions */
+            if(!strcmp(tok.tokens[i] + 1, "tostr")) tok_replace(&tok, i, TOK_FUNCTION, "tostring");
             /* replace math functions */
             if(!strcmp(tok.tokens[i] + 1, "srand")) tok_replace(&tok, i, TOK_FUNCTION, "math.randomseed");
             if(!strcmp(tok.tokens[i] + 1, "sqrt"))  tok_replace(&tok, i, TOK_FUNCTION, "math.sqrt");
@@ -538,6 +540,14 @@ char p8totic_lua[] =
 "	x0,y0=__p8_coord(x0,y0)\n"
 "	x1,y1=__p8_coord(x1,y1)\n"
 " __line(x0,y0,x1,y1,c)\n"
+"end\n"
+"\n"
+"function ovalfill(x0, y0, x1, y1, color)\n"
+"	local cx = math.floor((x0 + x1) / 2)\n"
+"	local cy = math.floor((y0 + y1) / 2)\n"
+"	local rx = math.floor(math.abs(x1 - x0) / 2)\n"
+"	local ry = math.floor(math.abs(y1 - y0) / 2)\n"
+"	elli(cx, cy, rx, ry, color)\n"
 "end\n"
 "\n"
 "function sspr(sx,sy,sw,sh,dx,dy,dw,dh) -- todo\n"
