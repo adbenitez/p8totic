@@ -232,7 +232,7 @@ char p8totic_lua[] =
 ----------------------------------------
 --known issues:
 -- * swapping elements in the screen palette--e.g. pal(a,b,1)--doesn't work properly yet. However, pal(a,b) does work
--- * flip_x and flip_y are currently ignored in spr() and sspr()
+-- * flip_x and flip_y are currently ignored sspr() only spr() supports them
 -- * music() and flip() do nothing. sfx() does not take into account offset
 -- * stat(1) always returns "0.5"
 */
@@ -578,19 +578,23 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "__spr=spr\n"
-"function spr(n,x,y,w,h) --todo flip_x,y\n"
-"	w=w or 1\n"
-"	h=h or 1\n"
-"	local sx,sy,xoff,yoff=n%16*8,math.floor(n/16)*8,0,0\n"
-"	for j=0,h-1 do\n"
-"	 for i=0,w-1 do\n"
-"	  sspr(sx+xoff,sy+yoff,8,8,x+xoff,y+yoff)\n"
-/*"			--__spr(n+j*16+i,x+i*8,y+j*8,__p8_ctrans)\n"*/
-"		 xoff=xoff+8\n"
+"function spr(n, x, y, w, h, flip_x, flip_y)\n"
+"	x = x or 0\n"
+"	y = y or 0\n"
+"	w = w or 1\n"
+"	h = h or 1\n"
+"	flip_x = flip_x or false\n"
+"	flip_y = flip_y or false\n"
+"	local flip = 0\n"
+"	if flip_x then flip = flip + 1 end\n"
+"	if flip_y then flip = flip + 2 end\n"
+"	local colorkey = {}\n"
+"	for color_index, is_transparent in ipairs(__p8_ctrans) do\n"
+"		if is_transparent then\n"
+"			table.insert(colorkey, color_index - 1) -- TIC-80 uses 0-based colors\n"
 "		end\n"
-"		yoff=yoff+8\n"
-"		xoff=0\n"
 "	end\n"
+"	__spr(n, x, y, colorkey, 1, flip, 0, w, h)\n"
 "end\n"
 "\n"
 "__map=map\n"
