@@ -34,6 +34,12 @@ Only needs emscripten's `emcc` and `gcc` to compile.
 - `make wasm` if you only want to compile the WebAssembly version (the required boilerplate html is in the [public](https://gitlab.com/bztsrc/p8totic/-/tree/main/public) directory).
 - `make cli` if you only want to compile the command line version (totally dependency-free, should work on any POSIX system).
 
+Contributors
+------------
+
+I'd like to say thanks to [adbenitez](https://gitlab.com/adbenitez) for testing and fixing the lib, his contributions improved
+**p8totic** a lot.
+
 License
 -------
 
