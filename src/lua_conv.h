@@ -683,7 +683,7 @@ char p8totic_lua[] =
 "		__btnp_cache[key] = false\n"
 "		return true\n"
 "	end\n"
-"	return false\n"
+"	return __btnp(key)\n"
 "end\n"
 "function __update_btnp_cache()\n"
 "	for b = 0, 31 do\n"
