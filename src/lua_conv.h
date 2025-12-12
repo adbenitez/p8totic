@@ -112,7 +112,7 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
           !tok.tokens[i][3]) tok.tokens[i][1] = '~';
         /* convert shorthand operators, like "var +=" -> "var = var +" */
         j = 0;
-        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1;
+        if(tok_match(&tok, i, 2, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1; else
         if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR)) j = i + 2;
         if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && strchr(tok.tokens[j] + 1, '=')) {
             tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
