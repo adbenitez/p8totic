@@ -220,26 +220,32 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                     if(idx_token >= 0 && label_token >= 0 && callback_token >= 0) {
                         int idx = atoi(tok.tokens[idx_token] + 1);
                         if(idx >= 1 && idx <= 5) {
+                            int cb_len = 0;
                             /* store the index (convert from 1-based to 0-based for TIC-80) */
                             menu_indices[menu_count] = idx - 1;
-                            /* copy label (remove quotes) */
+                            /* copy label (remove quotes) - safely */
                             strncpy(menu_labels[menu_count], tok.tokens[label_token] + 1, sizeof(menu_labels[0]) - 1);
                             menu_labels[menu_count][sizeof(menu_labels[0]) - 1] = 0;
                             /* remove quotes from label if present */
                             len = strlen(menu_labels[menu_count]);
-                            if(len > 0 && (menu_labels[menu_count][len-1] == '"' || menu_labels[menu_count][len-1] == '\''))
+                            if(len > 0 && (menu_labels[menu_count][len-1] == '"' || menu_labels[menu_count][len-1] == '\'')) {
                                 menu_labels[menu_count][len-1] = 0;
-                            if(menu_labels[menu_count][0] == '"' || menu_labels[menu_count][0] == '\'') {
-                                memmove(menu_labels[menu_count], menu_labels[menu_count] + 1, len);
+                                len--;
+                            }
+                            if(len > 0 && (menu_labels[menu_count][0] == '"' || menu_labels[menu_count][0] == '\'')) {
+                                memmove(menu_labels[menu_count], menu_labels[menu_count] + 1, len); /* len is now correct after quote removal */
                             }
                             /* copy callback function name - may span multiple tokens if name contains numbers */
                             menu_callbacks[menu_count][0] = 0;
-                            for(k = callback_token; k < j && strlen(menu_callbacks[menu_count]) < sizeof(menu_callbacks[0]) - 1; k++) {
+                            for(k = callback_token; k < j && cb_len < (int)sizeof(menu_callbacks[0]) - 1; k++) {
                                 /* concatenate variable/function names and numbers that are part of the identifier */
                                 if(tok.tokens[k][0] == TOK_VARIABLE || tok.tokens[k][0] == TOK_FUNCTION || 
-                                   (tok.tokens[k][0] == TOK_NUMBER && strlen(menu_callbacks[menu_count]) > 0)) {
-                                    strncat(menu_callbacks[menu_count], tok.tokens[k] + 1, 
-                                           sizeof(menu_callbacks[0]) - strlen(menu_callbacks[menu_count]) - 1);
+                                   (tok.tokens[k][0] == TOK_NUMBER && cb_len > 0)) {
+                                    l = strlen(tok.tokens[k] + 1);
+                                    if(cb_len + l < (int)sizeof(menu_callbacks[0]) - 1) {
+                                        strcat(menu_callbacks[menu_count], tok.tokens[k] + 1);
+                                        cb_len += l;
+                                    }
                                 } else if(tok.tokens[k][0] != TOK_SEPARATOR || strchr(tok.tokens[k] + 1, ',') || strchr(tok.tokens[k] + 1, ')')) {
                                     /* stop at comma or closing paren */
                                     break;
@@ -248,8 +254,9 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                             menu_count++;
                         }
                     }
-                    /* remove the entire menuitem() call */
-                    for(k = j; k >= i; k--)
+                    /* remove the entire menuitem() call - delete tokens from i to j inclusive */
+                    /* when we delete token i, all subsequent tokens shift down, so we keep deleting at i */
+                    for(k = 0; k <= j - i; k++)
                         tok_delete(&tok, i);
                     i--; /* adjust index since we deleted tokens */
                     continue; /* skip to next iteration after deletion */
@@ -279,13 +286,18 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         int menu_func_len = 0;
         
         /* build the menu metatag with labels separated by spaces (use tab for spaces in labels) */
+        len = strlen(menu_meta);
         for(i = 0; i < menu_count; i++) {
             /* replace spaces with tabs in menu labels for TIC-80 */
             for(j = 0; menu_labels[i][j]; j++) {
                 if(menu_labels[i][j] == ' ') menu_labels[i][j] = '\t';
             }
-            strcat(menu_meta, " ");
-            strcat(menu_meta, menu_labels[i]);
+            /* safely append label with bounds checking */
+            if(len + 1 + strlen(menu_labels[i]) < sizeof(menu_meta) - 1) {
+                strcat(menu_meta, " ");
+                strcat(menu_meta, menu_labels[i]);
+                len = strlen(menu_meta);
+            }
         }
         
         /* build the MENU() callback function */
