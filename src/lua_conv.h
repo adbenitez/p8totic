@@ -30,6 +30,9 @@
 #define TOK_IMPLEMENTATION
 #include "tok.h"
 
+/* Compound assignment operators that need expansion for TIC-80 */
+#define COMPOUND_OPS "+-*/%&^\\."
+
 /* PICO-8 codepage to UTF-8 UNICODE */
 const char *pico_utf8[] = {
     "▮","■","□","⁙","⁘","‖","◀","▶","「","」","¥","•","、","。","゛","゜",
@@ -114,22 +117,25 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         j = 0;
         if(tok_match(&tok, i, 2, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1;
         if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR)) j = i + 2;
-        if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && strchr(tok.tokens[j] + 1, '=')) {
+        if(j && strchr(COMPOUND_OPS, tok.tokens[j][1]) && strchr(tok.tokens[j] + 1, '=')) {
             tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
             tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
             tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
             c = strchr(tok.tokens[j + 2] + 1, '='); *c = 0;
         }
         /* handle tokenizer quirk: "var-=num" may be tokenized as "var" "-" "=num" due to negative number handling */
-        if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && !tok.tokens[j][2] &&
+        if(j && strchr(COMPOUND_OPS, tok.tokens[j][1]) && !tok.tokens[j][2] &&
           j + 1 < tok.num && tok.tokens[j + 1][0] == TOK_NUMBER && tok.tokens[j + 1][1] == '=') {
             /* reconstruct as "var = var op num" where the number part is "=num"[1:] */
-            char tmp[256];
-            snprintf(tmp, sizeof(tmp), "%s", tok.tokens[j + 1] + 2); /* skip '=' in number */
-            tok_replace(&tok, j + 1, TOK_NUMBER, tmp);
-            tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
-            tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
-            tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
+            l = strlen(tok.tokens[j + 1] + 2);
+            if(l > 0 && l < 256) { /* bounds check: ensure token fits in reasonable buffer */
+                char tmp[256];
+                memcpy(tmp, tok.tokens[j + 1] + 2, l + 1); /* safe copy with null terminator */
+                tok_replace(&tok, j + 1, TOK_NUMBER, tmp);
+                tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
+                tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
+                tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
+            }
         }
         /* replace "\" with "//" */
         if(tok.tokens[i][0] == TOK_OPERATOR && !strcmp(tok.tokens[i] + 1, "\\")) {
