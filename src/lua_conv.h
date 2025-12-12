@@ -112,13 +112,24 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
           !tok.tokens[i][3]) tok.tokens[i][1] = '~';
         /* convert shorthand operators, like "var +=" -> "var = var +" */
         j = 0;
-        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1;
+        if(tok_match(&tok, i, 2, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1;
         if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR)) j = i + 2;
         if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && strchr(tok.tokens[j] + 1, '=')) {
             tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
             tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
             tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
             c = strchr(tok.tokens[j + 2] + 1, '='); *c = 0;
+        }
+        /* handle tokenizer quirk: "var-=num" may be tokenized as "var" "-" "=num" due to negative number handling */
+        if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && !tok.tokens[j][2] &&
+          j + 1 < tok.num && tok.tokens[j + 1][0] == TOK_NUMBER && tok.tokens[j + 1][1] == '=') {
+            /* reconstruct as "var = var op num" where the number part is "=num"[1:] */
+            char tmp[256];
+            snprintf(tmp, sizeof(tmp), "%s", tok.tokens[j + 1] + 2); /* skip '=' in number */
+            tok_replace(&tok, j + 1, TOK_NUMBER, tmp);
+            tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
+            tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
+            tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
         }
         /* replace "\" with "//" */
         if(tok.tokens[i][0] == TOK_OPERATOR && !strcmp(tok.tokens[i] + 1, "\\")) {

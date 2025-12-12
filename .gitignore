@@ -1,0 +1,11 @@
+# Build artifacts
+src/p8totic
+src/p8totic.exe
+public/p8totic.js
+public/p8totic.wasm
+
+# Test files
+*.p8
+*.tic
+*.p8.png
+*.tic.png
