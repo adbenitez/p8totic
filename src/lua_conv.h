@@ -76,7 +76,7 @@ int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
 /* configure lua token types here */
 char *lua_com[] = { "\\-\\-.*?$", NULL };
 char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "\\.\\.=", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|\\\\!][:=]?", NULL };
-char *lua_num[] = { "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
+char *lua_num[] = { "[\\-]?[1-9][0-9]*", "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
 char *lua_str[] = { "\"", "\'", NULL };
 char *lua_sep[] = { "[", "]", "{", "}", ",", ";", ":", NULL };
 char *lua_typ[] = { "false", "local", "nil", "true", NULL };
@@ -152,6 +152,10 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                     }
                 }
             }
+        }
+        /* add an extra space between numbers and keywords */
+        if(tok_match(&tok, i, 2, TOK_NUMBER, TOK_KEYWORD)) {
+            tok_insert(&tok, i + 1, TOK_SEPARATOR, " ");
         }
         /*** API function name changes ***/
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_FUNCTION) {
