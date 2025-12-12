@@ -94,6 +94,11 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
     tok_t tok;
     int i, j, k, l, m, len;
     char tmp[256], *c;
+    /* for menuitem() conversion */
+    char menu_labels[5][20];  /* up to 5 menu items, labels up to 16 chars + quotes + null */
+    char menu_callbacks[5][64]; /* callback function names */
+    int menu_count = 0;
+    int menu_indices[5] = {0};
 
     /* tokenize Lua string */
     if(!tok_new(&tok, lua_rules, src, srclen)) {
@@ -185,20 +190,132 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             }
             /* replace mapdraw() -> map() */
             if(!strcmp(tok.tokens[i] + 1, "mapdraw")) tok_replace(&tok, i, TOK_FUNCTION, "map");
+            /* convert menuitem() calls: menuitem(index, label, callback) */
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "menuitem")) {
+                /* find the closing parenthesis - look for a separator containing ')' */
+                j = -1;
+                for(k = i + 2; k < tok.num && j < 0; k++) {
+                    if(tok.tokens[k][0] == TOK_SEPARATOR && strchr(tok.tokens[k] + 1, ')')) {
+                        j = k;
+                        break;
+                    }
+                }
+                if(j > i && menu_count < 5) {
+                    /* try to extract index, label, and callback */
+                    int idx_token = -1, label_token = -1, callback_token = -1;
+                    int has_params = 0;
+                    /* look for: menuitem ( index , label , callback ) */
+                    for(k = i + 1; k < j; k++) {
+                        if(tok.tokens[k][0] == TOK_NUMBER && idx_token < 0) {
+                            idx_token = k;
+                            has_params = 1;
+                        } else if(tok.tokens[k][0] == TOK_STRING && label_token < 0 && has_params) {
+                            label_token = k;
+                        } else if((tok.tokens[k][0] == TOK_FUNCTION || tok.tokens[k][0] == TOK_VARIABLE) && 
+                                  callback_token < 0 && has_params) {
+                            callback_token = k;
+                        }
+                    }
+                    /* if we have valid parameters, store them */
+                    if(idx_token >= 0 && label_token >= 0 && callback_token >= 0) {
+                        int idx = atoi(tok.tokens[idx_token] + 1);
+                        if(idx >= 1 && idx <= 5) {
+                            /* store the index (convert from 1-based to 0-based for TIC-80) */
+                            menu_indices[menu_count] = idx - 1;
+                            /* copy label (remove quotes) */
+                            strncpy(menu_labels[menu_count], tok.tokens[label_token] + 1, sizeof(menu_labels[0]) - 1);
+                            menu_labels[menu_count][sizeof(menu_labels[0]) - 1] = 0;
+                            /* remove quotes from label if present */
+                            len = strlen(menu_labels[menu_count]);
+                            if(len > 0 && (menu_labels[menu_count][len-1] == '"' || menu_labels[menu_count][len-1] == '\''))
+                                menu_labels[menu_count][len-1] = 0;
+                            if(menu_labels[menu_count][0] == '"' || menu_labels[menu_count][0] == '\'') {
+                                memmove(menu_labels[menu_count], menu_labels[menu_count] + 1, len);
+                            }
+                            /* copy callback function name - may span multiple tokens if name contains numbers */
+                            menu_callbacks[menu_count][0] = 0;
+                            for(k = callback_token; k < j && strlen(menu_callbacks[menu_count]) < sizeof(menu_callbacks[0]) - 1; k++) {
+                                /* concatenate variable/function names and numbers that are part of the identifier */
+                                if(tok.tokens[k][0] == TOK_VARIABLE || tok.tokens[k][0] == TOK_FUNCTION || 
+                                   (tok.tokens[k][0] == TOK_NUMBER && strlen(menu_callbacks[menu_count]) > 0)) {
+                                    strncat(menu_callbacks[menu_count], tok.tokens[k] + 1, 
+                                           sizeof(menu_callbacks[0]) - strlen(menu_callbacks[menu_count]) - 1);
+                                } else if(tok.tokens[k][0] != TOK_SEPARATOR || strchr(tok.tokens[k] + 1, ',') || strchr(tok.tokens[k] + 1, ')')) {
+                                    /* stop at comma or closing paren */
+                                    break;
+                                }
+                            }
+                            menu_count++;
+                        }
+                    }
+                    /* remove the entire menuitem() call */
+                    for(k = j; k >= i; k--)
+                        tok_delete(&tok, i);
+                    i--; /* adjust index since we deleted tokens */
+                    continue; /* skip to next iteration after deletion */
+                }
+            }
             /* replace misc functions */
-            if(!strcmp(tok.tokens[i] + 1, "tostr")) tok_replace(&tok, i, TOK_FUNCTION, "tostring");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "tostr")) tok_replace(&tok, i, TOK_FUNCTION, "tostring");
             /* replace math functions */
-            if(!strcmp(tok.tokens[i] + 1, "srand")) tok_replace(&tok, i, TOK_FUNCTION, "math.randomseed");
-            if(!strcmp(tok.tokens[i] + 1, "sqrt"))  tok_replace(&tok, i, TOK_FUNCTION, "math.sqrt");
-            if(!strcmp(tok.tokens[i] + 1, "abs"))   tok_replace(&tok, i, TOK_FUNCTION, "math.abs");
-            if(!strcmp(tok.tokens[i] + 1, "min"))   tok_replace(&tok, i, TOK_FUNCTION, "math.min");
-            if(!strcmp(tok.tokens[i] + 1, "max"))   tok_replace(&tok, i, TOK_FUNCTION, "math.max");
-            if(!strcmp(tok.tokens[i] + 1, "flr"))   tok_replace(&tok, i, TOK_FUNCTION, "math.floor");
-            if(!strcmp(tok.tokens[i] + 1, "rnd"))   tok_replace(&tok, i, TOK_FUNCTION,
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "srand")) tok_replace(&tok, i, TOK_FUNCTION, "math.randomseed");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "sqrt"))  tok_replace(&tok, i, TOK_FUNCTION, "math.sqrt");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "abs"))   tok_replace(&tok, i, TOK_FUNCTION, "math.abs");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "min"))   tok_replace(&tok, i, TOK_FUNCTION, "math.min");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "max"))   tok_replace(&tok, i, TOK_FUNCTION, "math.max");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "flr"))   tok_replace(&tok, i, TOK_FUNCTION, "math.floor");
+            if(tok.tokens[i] && !strcmp(tok.tokens[i] + 1, "rnd"))   tok_replace(&tok, i, TOK_FUNCTION,
                 i + 3 < tok.num && tok.tokens[i + 2][1] == ')' && tok.tokens[i + 3][1] == '*' ? "math.random" : "math.random()*");
         }
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_VARIABLE) {
             if(!strcmp(tok.tokens[i] + 1, "pi"))    tok_replace(&tok, i, TOK_VARIABLE, "math.pi");
+        }
+    }
+
+    /* generate MENU() callback if menuitem() calls were found */
+    if(menu_count > 0) {
+        char menu_meta[256] = "-- menu:";
+        char menu_func[1024];
+        int menu_func_len = 0;
+        
+        /* build the menu metatag with labels separated by spaces (use tab for spaces in labels) */
+        for(i = 0; i < menu_count; i++) {
+            /* replace spaces with tabs in menu labels for TIC-80 */
+            for(j = 0; menu_labels[i][j]; j++) {
+                if(menu_labels[i][j] == ' ') menu_labels[i][j] = '\t';
+            }
+            strcat(menu_meta, " ");
+            strcat(menu_meta, menu_labels[i]);
+        }
+        
+        /* build the MENU() callback function */
+        menu_func_len = snprintf(menu_func, sizeof(menu_func),
+            "\nfunction MENU(index)\n");
+        for(i = 0; i < menu_count; i++) {
+            if(i == 0) {
+                menu_func_len += snprintf(menu_func + menu_func_len, sizeof(menu_func) - menu_func_len,
+                    "  if index == %d then\n    if %s ~= nil then %s() end\n",
+                    menu_indices[i], menu_callbacks[i], menu_callbacks[i]);
+            } else {
+                menu_func_len += snprintf(menu_func + menu_func_len, sizeof(menu_func) - menu_func_len,
+                    "  elseif index == %d then\n    if %s ~= nil then %s() end\n",
+                    menu_indices[i], menu_callbacks[i], menu_callbacks[i]);
+            }
+        }
+        menu_func_len += snprintf(menu_func + menu_func_len, sizeof(menu_func) - menu_func_len,
+            "  end\nend\n");
+        
+        /* insert the menu metatag at the beginning */
+        tok_insert(&tok, 0, TOK_COMMENT, menu_meta);
+        tok_insert(&tok, 1, TOK_SEPARATOR, "\n");
+        
+        /* append the MENU function at the end - tokenize it and append all tokens */
+        tok_t menu_tok;
+        if(tok_new(&menu_tok, lua_rules, menu_func, menu_func_len)) {
+            for(i = 0; i < menu_tok.num; i++) {
+                tok_append(&tok, menu_tok.tokens[i][0], menu_tok.tokens[i] + 1);
+            }
+            tok_free(&menu_tok);
         }
     }
 
