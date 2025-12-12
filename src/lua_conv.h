@@ -154,7 +154,8 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             }
         }
         /* add an extra space between numbers and keywords */
-        if(tok_match(&tok, i, 2, TOK_NUMBER, TOK_KEYWORD)) {
+        if(i + 1 < tok.num && tok.tokens[i] && tok.tokens[i + 1] && tok.tokens[i][0] == TOK_NUMBER &&
+          (tok.tokens[i + 1][0] == TOK_KEYWORD || tok.tokens[i + 1][0] == TOK_VARIABLE || tok.tokens[i + 1][0] == TOK_FUNCTION)) {
             tok_insert(&tok, i + 1, TOK_SEPARATOR, " ");
         }
         /*** API function name changes ***/
