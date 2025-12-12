@@ -203,6 +203,10 @@ static int _tok_regexp(char *regexp, char *str)
             else if(*c == '*') { c++; rmin = 0; rmax = 0; }
             /* do the match */
             for(r = 0; *s && valid[(unsigned int)*s] && (!rmax || r < rmax); s++, r++);
+            /* allow exactly one + or - inside floating point numbers if they come right after the exponent marker */
+            if(r && ((str[0] >= '0' && str[0] <= '9') || (str[0] == '-' && str[1] >= '0' && str[1] <= '9')) &&
+                (*s == '+' || *s == '-') && (s[-1] == 'e' || s[-1] == 'E' || s[-1] == 'p' || s[-1] == 'P'))
+                    for(s++; *s && valid[(unsigned int)*s] && (!rmax || r < rmax); s++, r++);
         }
         if((!*s && *c) || r < rmin) return 0;
     }
@@ -280,7 +284,8 @@ nextchar:   if(src[k]) k++;
                         t[i] = (t[i] & ~0xf) | 8;
                     TOK_FREE(s);
                 }
-                if(i && (t[i] & 0xf) == 3 && (t[i - 1] & 0xf) == 2 && (src[t[i - 1] >> 4] == '-' || src[t[i - 1] >> 4] == '.'))
+                if(i && (t[i] & 0xf) == 3 && (t[i - 1] & 0xf) == 2 && (src[t[i - 1] >> 4] == '-' || src[t[i - 1] >> 4] == '.') &&
+                  src[(t[i - 1] >> 4) + 1] != '=')
                     t[i] -= 16;
             }
             tok->tokens = (char**)TOK_REALLOC(NULL, (nt + 1) * sizeof(char*));
