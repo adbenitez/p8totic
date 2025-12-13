@@ -657,7 +657,7 @@ char p8totic_lua[] =
 "function fget(n,f)\n"
 " f=f or -1\n"
 "	if f<0 then\n"
-"	 return __p8_sflags[n+1]\n"
+"	 return __p8_sflags[n+1] or 0\n"
 "	end\n"
 "	return __tic_fget(n,f)\n"
 "end\n"
