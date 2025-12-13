@@ -1,8 +1,7 @@
 # Build artifacts
 src/p8totic
 src/*.o
-src/*.wasm
-src/*.js
+src/*.exe
 
 # Test files
 *.tic
