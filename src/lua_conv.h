@@ -643,7 +643,7 @@ char p8totic_lua[] =
 "	  __tic_fset(n,bit,(f&(1<<bit))>0)\n"
 "	 end\n"
 "	else	 \n"
-"	 local flags=__p8_sflags[n+1]\n"
+"	 local flags=__p8_sflags[n+1] or 0\n"
 "	 if v then\n"
 "	  flags=flags|(1<<f)\n"
 "		else\n"
