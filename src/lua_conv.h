@@ -76,7 +76,7 @@ int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
 /* configure lua token types here */
 char *lua_com[] = { "\\-\\-.*?$", NULL };
 char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "\\.\\.=", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|\\\\!][:=]?", NULL };
-char *lua_num[] = { "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
+char *lua_num[] = { "[\\-]?[1-9][0-9]*", "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
 char *lua_str[] = { "\"", "\'", NULL };
 char *lua_sep[] = { "[", "]", "{", "}", ",", ";", ":", NULL };
 char *lua_typ[] = { "false", "local", "nil", "true", NULL };
@@ -111,14 +111,16 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_OPERATOR && tok.tokens[i][1] == '!' && tok.tokens[i][2] == '=' &&
           !tok.tokens[i][3]) tok.tokens[i][1] = '~';
         /* convert shorthand operators, like "var +=" -> "var = var +" */
-        j = 0;
-        if(tok_match(&tok, i, 2, TOK_VARIABLE, TOK_OPERATOR)) j = i + 1; else
-        if(tok_match(&tok, i, 3, TOK_VARIABLE, TOK_SEPARATOR, TOK_OPERATOR)) j = i + 2;
-        if(j && strchr("+-*/%&^\\.", tok.tokens[j][1]) && strchr(tok.tokens[j] + 1, '=')) {
-            tok_insert(&tok, j + 1, TOK_OPERATOR, tok.tokens[j] + 1);
-            tok_insert(&tok, j + 1, TOK_VARIABLE, tok.tokens[i] + 1);
-            tok.tokens[j][1] = '='; tok.tokens[j][2] = 0;
-            c = strchr(tok.tokens[j + 2] + 1, '='); *c = 0;
+        if(tok.tokens[i][0] == TOK_OPERATOR && strchr("+-*/%&^\\.", tok.tokens[i][1]) && strchr(tok.tokens[i] + 1, '=')) {
+            c = strchr(tok.tokens[i] + 1, '='); *c = 0;
+            /* variable might consist of multiple tokens, eg. "var[i].field +=" so we need to copy all tokens between */
+            for(j = i - 1, m = 0; j > 0 && (m || tok.tokens[j][0] != TOK_VARIABLE); j--) {
+                if(tok.tokens[j][1] == ']' || tok.tokens[j][1] == ')') m++;
+                if(tok.tokens[j][1] == '[' || tok.tokens[j][1] == '(') m--;
+                tok_insert(&tok, i, tok.tokens[j][0], tok.tokens[j] + 1);
+            }
+            tok_insert(&tok, i, tok.tokens[j][0], tok.tokens[j] + 1);
+            tok_insert(&tok, i, TOK_OPERATOR, "=");
         }
         /* replace "\" with "//" */
         if(tok.tokens[i][0] == TOK_OPERATOR && !strcmp(tok.tokens[i] + 1, "\\")) {
@@ -150,6 +152,10 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
                     }
                 }
             }
+        }
+        /* add an extra space between numbers and keywords */
+        if(tok_match(&tok, i, 2, TOK_NUMBER, TOK_KEYWORD)) {
+            tok_insert(&tok, i + 1, TOK_SEPARATOR, " ");
         }
         /*** API function name changes ***/
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_FUNCTION) {
