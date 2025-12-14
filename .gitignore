@@ -1,0 +1,14 @@
+# Compiled binaries
+src/p8totic
+src/p8totic.exe
+
+# Build artifacts
+*.o
+*.wasm
+*.js.map
+
+# Editor files
+*.swp
+*.swo
+*~
+.DS_Store
