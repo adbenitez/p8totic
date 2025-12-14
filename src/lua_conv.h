@@ -76,7 +76,7 @@ int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
 /* configure lua token types here */
 char *lua_com[] = { "\\-\\-.*?$", NULL };
 char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "\\.\\.=", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|\\\\!][:=]?", NULL };
-char *lua_num[] = { "[\\-]?[1-9][0-9]*", "[\\-]?[0-9][0-9bx]?[0-9\\.a-f]*", NULL };
+char *lua_num[] = { "[\\-]?0[bx][0-9a-f]+", "[\\-]?[0-9][0-9\\.e\\-]*", NULL };
 char *lua_str[] = { "\"", "\'", NULL };
 char *lua_sep[] = { "[", "]", "{", "}", ",", ";", ":", NULL };
 char *lua_typ[] = { "false", "local", "nil", "true", NULL };
@@ -114,7 +114,7 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         if(tok.tokens[i][0] == TOK_OPERATOR && strchr("+-*/%&^\\.", tok.tokens[i][1]) && strchr(tok.tokens[i] + 1, '=')) {
             c = strchr(tok.tokens[i] + 1, '='); *c = 0;
             /* variable might consist of multiple tokens, eg. "var[i].field +=" so we need to copy all tokens between */
-            for(j = i - 1, m = 0; j > 0 && (m || tok.tokens[j][0] != TOK_VARIABLE); j--) {
+            for(j = i - 1, m = 0; j > 0 && (m || tok.tokens[j][0] != TOK_VARIABLE || tok.tokens[j][1] == '.'); j--) {
                 if(tok.tokens[j][1] == ']' || tok.tokens[j][1] == ')') m++;
                 if(tok.tokens[j][1] == '[' || tok.tokens[j][1] == '(') m--;
                 tok_insert(&tok, i, tok.tokens[j][0], tok.tokens[j] + 1);
@@ -132,7 +132,8 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             j = i + (tok.tokens[i + 1][1] == '(' ? 2 : 3);
             k = tok_next(&tok, j, TOK_SEPARATOR, ")");
             if(k < 0) k = tok_next(&tok, j, TOK_SEPARATOR, ") ");
-            if(k > i && k + 1 < tok.num) {
+            /* if the last token is an "or" or "and" keyword, then no need to add "then" */
+            if(k > i && k + 1 < tok.num && tok.tokens[k + 1][0] != TOK_KEYWORD) {
                 for(l = k + 1; l < tok.num && (tok.tokens[l][0] != TOK_KEYWORD || strcmp(tok.tokens[l] + 1, "then")); l++)
                     if(strchr(tok.tokens[l] + 1, '\n')) { l = 0; break; }
                 /* if there was no "then" before the newline */
@@ -206,6 +207,13 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
         }
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_VARIABLE) {
             if(!strcmp(tok.tokens[i] + 1, "pi"))    tok_replace(&tok, i, TOK_VARIABLE, "math.pi");
+            /* some functions (like btn) accepts special characters as if they were constant variables */
+            if(!strcmp(tok.tokens[i] + 1, "⬇")) tok_replace(&tok, i, TOK_NUMBER, "1"); else     /* Down */
+            if(!strcmp(tok.tokens[i] + 1, "⬅")) tok_replace(&tok, i, TOK_NUMBER, "2"); else     /* Left */
+            if(!strcmp(tok.tokens[i] + 1, "➡")) tok_replace(&tok, i, TOK_NUMBER, "3"); else     /* Right */
+            if(!strcmp(tok.tokens[i] + 1, "⬆")) tok_replace(&tok, i, TOK_NUMBER, "0"); else     /* Up */
+            if(!strcmp(tok.tokens[i] + 1, "🅾")) tok_replace(&tok, i, TOK_NUMBER, "4"); else     /* O */
+            if(!strcmp(tok.tokens[i] + 1, "❎")) tok_replace(&tok, i, TOK_NUMBER, "6");          /* X */
         }
     }
 
@@ -283,6 +291,10 @@ char p8totic_lua[] =
 "	 return collectgarbage(\"count\")\n"
 "	end\n"
 " return 0.5\n"
+"end\n"
+"\n"
+"function menuitem(idx,label,callback)\n"
+/*" --do nothing\n"*/
 "end\n"
 "\n"
 /*"--strings\n"*/
@@ -412,6 +424,7 @@ char p8totic_lua[] =
 "\n"
 "--graphics\n"
 */
+"__p8_pal=\"0000001D2B537E2553008751AB52365F574FC2C3C7FFF1E8FF004DFFA300FFEC2700E43629ADFF83769CFF77A8FFCCAA\"\n"
 "__p8_color=7\n"
 "__p8_ctrans={true,false,false,false,false,false,false,false,\n"
 "             false,false,false,false,false,false,false,false}\n"
@@ -419,20 +432,22 @@ char p8totic_lua[] =
 "__p8_camera_y=0\n"
 "__p8_cursor_x=0\n"
 "__p8_cursor_y=0\n"
+/*
 "__p8_sflags={}\n"
 "for i=1,256 do\n"
 " __p8_sflags[i]=0\n"
 "end\n"
 "\n"
+*/
 "function camera(cx,cy)\n"
-" cx=cx or 0\n"
+"	cx=cx or 0\n"
 "	cy=cy or 0\n"
 "	__p8_camera_x=-math.floor(cx)\n"
 "	__p8_camera_y=-math.floor(cy)\n"
 "end\n"
 "\n"
 "function cursor(cx,cy)\n"
-" cx=cx or 0\n"
+"	cx=cx or 0\n"
 "	cy=cy or 0\n"
 "	__p8_cursor_x=math.floor(cx)\n"
 "	__p8_cursor_y=math.floor(cy)\n"
@@ -445,7 +460,7 @@ char p8totic_lua[] =
 "\n"
 "__print=print\n"
 "function print(str,x,y,c)\n"
-" x=x or __p8_cursor_x\n"
+"	x=x or __p8_cursor_x\n"
 "	y=y or __p8_cursor_y\n"
 "	c=c or __p8_color\n"
 "	c=peek4(0x7FE0+c)\n"
@@ -454,12 +469,12 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function color(c)\n"
-" c=c or 7\n"
+"	c=c or 7\n"
 "	__p8_color=math.floor(c%16)\n"
 "end\n"
 "\n"
 "function pal(c0,c1,type)\n"
-" c0=c0 or -1\n"
+"	c0=c0 or -1\n"
 "	c1=c1 or -1\n"
 "	type=type or 0\n"
 "	\n"
@@ -488,7 +503,7 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function palt(c,trans)\n"
-" c=c or -1\n"
+"	c=c or -1\n"
 "	if c<0 then -- reset\n"
 "	 __p8_ctrans[1]=true\n"
 "		for i=2,16 do\n"
@@ -500,14 +515,14 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function pset(x,y,c)\n"
-" c=c or __p8_color\n"
+"	c=c or __p8_color\n"
 "	c=peek4(0x7FE0+c)\n"
 "	x,y=__p8_coord(x,y)\n"
 " poke4(y*240+x,c) 	\n"
 "end\n"
 "\n"
 "function pget(x,y)\n"
-" x,y=__p8_coord(x,y)\n"
+"	x,y=__p8_coord(x,y)\n"
 "	return peek4(y*240+x)\n"
 "end\n"
 "\n"
@@ -522,8 +537,8 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function rect(x0,y0,x1,y1,c)\n"
-" c=c or __p8_color\n"
-" c=peek4(0x7FE0+c)\n"
+"	c=c or __p8_color\n"
+"	c=peek4(0x7FE0+c)\n"
 "	x0,y0=__p8_coord(x0,y0)\n"
 "	x1,y1=__p8_coord(x1,y1)\n"
 "	local w,h=x1-x0,y1-y0\n"
@@ -532,14 +547,14 @@ char p8totic_lua[] =
 "\n"
 "__circ=circ\n"
 "function circfill(x,y,r,c)\n"
-" c=c or __p8_color\n"
+"	c=c or __p8_color\n"
 "	c=peek4(0x7FE0+c)\n"
 "	x,y=__p8_coord(x,y)\n"
 "	__circ(x,y,r,c)\n"
 "end\n"
 "\n"
 "function circ(x,y,r,c)\n"
-" c=c or __p8_color\n"
+"	c=c or __p8_color\n"
 "	c=peek4(0x7FE0+c)\n"
 "	x,y=__p8_coord(x,y)\n"
 "	circb(x,y,r,c)\n"
@@ -547,8 +562,8 @@ char p8totic_lua[] =
 "\n"
 "__line=line\n"
 "function line(x0,y0,x1,y1,c)\n"
-" c=c or __p8_color\n"
-" c=peek4(0x7FE0+c)\n"
+"	c=c or __p8_color\n"
+"	c=peek4(0x7FE0+c)\n"
 "	x0,y0=__p8_coord(x0,y0)\n"
 "	x1,y1=__p8_coord(x1,y1)\n"
 " __line(x0,y0,x1,y1,c)\n"
@@ -563,7 +578,7 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 "function sspr(sx,sy,sw,sh,dx,dy,dw,dh) -- todo\n"
-" dw=dw or sw\n"
+"	dw=dw or sw\n"
 "	dh=dh or sh\n"
 " dx,dy=__p8_coord(dx,dy)\n"
 "	if dx>240 or dy>136 then return end\n"
@@ -638,6 +653,7 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 /*"--sprite flags\n"*/
+/*
 "function fset(n,f,v)\n"
 "	if f>7 then\n"
 "	 __p8_sflags[n+1]=f\n"
@@ -662,6 +678,7 @@ char p8totic_lua[] =
 "	return false\n"
 "end\n"
 "\n"
+*/
 /*"--input\n"*/
 "pico8ButtonMap = {}\n"
 "pico8ButtonMap[1] = 2 -- 0 left\n"
