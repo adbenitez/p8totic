@@ -432,13 +432,11 @@ char p8totic_lua[] =
 "__p8_camera_y=0\n"
 "__p8_cursor_x=0\n"
 "__p8_cursor_y=0\n"
-/*
 "__p8_sflags={}\n"
-"for i=1,256 do\n"
-" __p8_sflags[i]=0\n"
+"for i=0,255 do\n"
+" __p8_sflags[i+1]=peek(0x14404+i)\n"
 "end\n"
 "\n"
-*/
 "function camera(cx,cy)\n"
 "	cx=cx or 0\n"
 "	cy=cy or 0\n"
@@ -653,7 +651,6 @@ char p8totic_lua[] =
 "end\n"
 "\n"
 /*"--sprite flags\n"*/
-/*
 "function fset(n,f,v)\n"
 "	if f>7 then\n"
 "	 __p8_sflags[n+1]=f\n"
@@ -678,7 +675,6 @@ char p8totic_lua[] =
 "	return false\n"
 "end\n"
 "\n"
-*/
 /*"--input\n"*/
 "pico8ButtonMap = {}\n"
 "pico8ButtonMap[1] = 2 -- 0 left\n"
