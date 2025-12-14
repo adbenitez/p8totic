@@ -729,7 +729,7 @@ char p8totic_lua[] =
 "function _frame_clear()\n"
 "	rect(0,0,240,__voffs,0)"
 "	rect(0,__voffs,__hoffs,128,0)"
-"	rect(__hoffs+128,__voffs,__hoffs,__voffs,0)"
+"	rect(__hoffs+128,__voffs,__hoffs,128,0)"
 "	rect(0,_voffs+128,240,__voffs,0)"
 "end\n"
 "\n"
