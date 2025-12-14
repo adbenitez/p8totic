@@ -438,6 +438,16 @@ char p8totic_lua[] =
 " __p8_sflags[i+1]=peek(0x14404+i)\n"
 "end\n"
 "\n"
+"__clip=clip\n"
+"function clip(x,y,w,h)\n"
+"	if x==nil then\n"
+/*"		-- Reset to PICO-8 screen area\n"*/
+"		__clip(0,0,128,128)\n"
+"	else\n"
+"		__clip(x,y,w,h)\n"
+"	end\n"
+"end\n"
+"\n"
 "function camera(cx,cy)\n"
 "	cx=cx or 0\n"
 "	cy=cy or 0\n"
@@ -714,9 +724,20 @@ char p8totic_lua[] =
 /*"-- TIC function to call pico-8 callbacks.\n"*/
 "__updateTick = true\n"
 "__initalized = false\n"
+"__hoffs = (240-128)/2\n"
+"__voffs = (136-128)/2\n"
+"function _frame_clear()\n"
+"	rect(0,0,240,__voffs,0)"
+"	rect(0,__voffs,__hoffs,128,0)"
+"	rect(__hoffs+128,__voffs,__hoffs,__voffs,0)"
+"	rect(0,_voffs+128,240,__voffs,0)"
+"end\n"
+"\n"
 "function TIC()\n"
 "	-- Initialize\n"
 "	if __initalized == false then\n"
+"		cls()\n"
+"		clip()\n"
 /*"		PICO8_PALETTE()\n"*/
 "		if _init ~= nil then\n"
 "			_init()\n"
@@ -733,6 +754,9 @@ char p8totic_lua[] =
 "		end\n"
 "	end\n"
 /*"	-- Update and Draw\n"*/
+/*"	-- set screen offset, center PICO-8 screen\n"*/
+"	poke(0x3ff9,-__hoffs)\n"
+"	poke(0x3ffa,-__voffs)\n"
 "	if _update60 ~= nil then -- 60 FPS\n"
 "		_update60()\n"
 "		_btnp_clear()\n"
@@ -745,6 +769,9 @@ char p8totic_lua[] =
 "		end\n"
 "		__updateTick = not __updateTick\n"
 "	end\n"
+/*"	-- reset screen offset, draw black frame\n"*/
+"	memset(0x3FF9,0,2)\n"
+"	_frame_clear()\n"
 "end\n"
 "\n"
 "-- Add pico-8 cart below!\n";
