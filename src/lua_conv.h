@@ -31,19 +31,32 @@
 #include "tok.h"
 
 /* PICO-8 codepage to UTF-8 UNICODE
- * Note: Some emoji characters (cat, faces, buttons) are replaced with ASCII equivalents
- * for better compatibility with TIC-80's default font which doesn't render emojis properly.
- * Arrow emojis are kept as Unicode arrows which TIC-80 can render better than emoji variants. */
+ * Array maps PICO-8 characters 16-255 to UTF-8 strings (index 0 = char 16, index 239 = char 255)
+ * 
+ * ASCII Fallback Replacements (for TIC-80 compatibility):
+ * - Char 130 (0x82): 🐱 → "^.^"  (cat face)
+ * - Char 137 (0x89): 웃  → ":)"   (smiling face)
+ * - Char 140 (0x8C): 😐 → ":I"   (neutral face)
+ * - Char 142 (0x8E): 🅾️ → "(O)"  (O button)
+ * - Char 151 (0x97): ❎ → "(X)"  (X button)
+ * - Arrows: Emoji variants replaced with Unicode arrows (↑↓←→) without variation selectors
+ * 
+ * Other characters (block graphics, Japanese, symbols) kept as UTF-8 since TIC-80 renders them.
+ */
 const char *pico_utf8[] = {
+    /* 16-31: PICO-8 special characters */
     "▮","■","□","⁙","⁘","‖","◀","▶","「","」","¥","•","、","。","゛","゜",
+    /* 32-127: Standard ASCII */
     " ","!","\"","#","$","%","&","'","(",")","*","+",",","-",".","/",
     "0","1","2","3","4","5","6","7","8","9",":",";","<","=",">","?",
     "@","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O",
     "P","Q","R","S","T","U","V","W","X","Y","Z","[","\\","]","^","_",
     "`","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o",
     "p","q","r","s","t","u","v","w","x","y","z","{","|","}","~","○",
+    /* 128-159: Extended characters with ASCII fallbacks for emojis */
     "█","▒","^.^","↓","░","✽","●","♥","☉",":)","⌂","←",":I","♪","(O)","◆",
     "…","→","★","⧗","↑","ˇ","∧","(X)","▤","▥","あ","い","う","え","お","か",
+    /* 160-255: Japanese Hiragana and Katakana */
     "き","く","け","こ","さ","し","す","せ","そ","た","ち","つ","て","と","な","に",
     "ぬ","ね","の","は","ひ","ふ","へ","ほ","ま","み","む","め","も","や","ゆ","よ",
     "ら","り","る","れ","ろ","わ","を","ん","っ","ゃ","ゅ","ょ","ア","イ","ウ","エ",

@@ -21,15 +21,26 @@ import sys
 
 try:
     from PIL import Image
+    from PIL import UnidentifiedImageError
 except ImportError:
     print("ERROR: PIL/Pillow not installed.", file=sys.stderr)
     print("Install with: pip install Pillow", file=sys.stderr)
     sys.exit(1)
 
+# Constants
+PIXEL_THRESHOLD = 128  # Threshold for determining if a pixel is "on" (dark) or "off" (light)
+
 def image_to_font_data(image_path):
     """Convert a PICO-8 font image to C array data suitable for TIC-80 sprites."""
     try:
         img = Image.open(image_path).convert('L')  # Convert to grayscale
+    except FileNotFoundError:
+        print(f"ERROR: Image file '{image_path}' not found.", file=sys.stderr)
+        sys.exit(1)
+    except UnidentifiedImageError:
+        print(f"ERROR: '{image_path}' is not a valid image file.", file=sys.stderr)
+        print("Supported formats: PNG, GIF, JPEG, BMP", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"ERROR: Could not open image '{image_path}': {e}", file=sys.stderr)
         sys.exit(1)
@@ -64,8 +75,7 @@ def image_to_font_data(image_path):
                     py = char_row * 8 + pixel_row
                     
                     # Check if pixel is "on" (dark pixel means foreground)
-                    # Threshold at 128 (middle gray)
-                    if pixels[px, py] < 128:
+                    if pixels[px, py] < PIXEL_THRESHOLD:
                         byte_val |= (1 << pixel_col)
                 
                 char_bytes.append(byte_val)
