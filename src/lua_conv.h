@@ -76,7 +76,7 @@ int pico_lua_to_utf8(uint8_t *dst, int maxlen, uint8_t *src, int srclen)
 /* configure lua token types here */
 char *lua_com[] = { "\\-\\-.*?$", NULL };
 char *lua_ops[] = { "::=", "\\.\\.\\.", "\\.\\.", "\\.\\.=", "[~=\\<\\>\\+\\-\\*\\/%&\\^\\|\\\\!][:=]?", NULL };
-char *lua_num[] = { "[\\-]?0[bx][0-9a-f]+", "[\\-]?[0-9][0-9\\.e\\-]*", NULL };
+char *lua_num[] = { "[\\-]?0[bx][0-9a-f\\.]+", "[\\-]?[0-9][0-9\\.e\\-]*", NULL };
 char *lua_str[] = { "\"", "\'", NULL };
 char *lua_sep[] = { "[", "]", "{", "}", ",", ";", ":", NULL };
 char *lua_typ[] = { "false", "local", "nil", "true", NULL };
@@ -155,9 +155,10 @@ static int pico_lua_to_tic_lua(char *dst, int maxlen, char *src, int srclen)
             }
         }
         /* add an extra space between numbers and keywords */
-        if(i + 1 < tok.num && tok.tokens[i] && tok.tokens[i + 1] && tok.tokens[i][0] == TOK_NUMBER &&
-          (tok.tokens[i + 1][0] == TOK_KEYWORD || tok.tokens[i + 1][0] == TOK_VARIABLE || tok.tokens[i + 1][0] == TOK_FUNCTION)) {
-            tok_insert(&tok, i + 1, TOK_SEPARATOR, " ");
+        if(i + 2 < tok.num && tok.tokens[i] && tok.tokens[i + 1] && tok.tokens[i + 2] &&
+          tok.tokens[i][0] != TOK_VARIABLE && tok.tokens[i + 1][0] == TOK_NUMBER &&
+          (tok.tokens[i + 2][0] == TOK_KEYWORD || tok.tokens[i + 2][0] == TOK_FUNCTION)) {
+            tok_insert(&tok, i + 2, TOK_SEPARATOR, " ");
         }
         /*** API function name changes ***/
         if(tok.tokens[i] && tok.tokens[i][0] == TOK_FUNCTION) {
@@ -685,6 +686,7 @@ char p8totic_lua[] =
 "pico8ButtonMap[6] = 5 -- 5 x\n"
 "pico8ButtonMap[7] = 6 -- 6 start\n"
 "pico8ButtonMap[8] = 7 -- 7 Doesn\'t exist\n"
+"pico8ButtonCache = {}\n"
 "function pico8ButtonToTic80(i, p)\n"
 "	if p == nil then\n"
 "		p = 0\n"
@@ -697,7 +699,16 @@ char p8totic_lua[] =
 "end\n"
 "__btnp = btnp\n"
 "function btnp(i, p)\n"
-"	return __btnp(pico8ButtonToTic80(i, p))\n"
+"	local j = pico8ButtonToTic80(i, p)\n"
+"	local ret = pico8ButtonCache[j]\n"
+"	pico8ButtonCache[j] = 0;\n"
+"	return ret\n"
+"end\n"
+"\n"
+"function _btnp_clear()\n"
+"	for i = 0,31 do\n"
+"		pico8ButtonCache[i] = 0\n"
+"	end\n"
 "end\n"
 "\n"
 /*"-- TIC function to call pico-8 callbacks.\n"*/
@@ -711,15 +722,25 @@ char p8totic_lua[] =
 "			_init()\n"
 "		end\n"
 "		__initalized = true\n"
+"		_btnp_clear()\n"
 "	end\n"
 "\n"
+/*"	-- Update button state\n"*/
+"	for p = 0,3 do\n"
+"		for i = 0,7 do\n"
+"			local j = pico8ButtonToTic80(i, p)\n"
+"			pico8ButtonCache[j] = pico8ButtonCache[j] | __btnp(j)\n"
+"		end\n"
+"	end\n"
 /*"	-- Update and Draw\n"*/
 "	if _update60 ~= nil then -- 60 FPS\n"
 "		_update60()\n"
+"		_btnp_clear()\n"
 "		if _draw ~= nil then _draw() end\n"
 "	elseif _update ~= nil then -- 30 FPS\n"
 "		if __updateTick then\n"
 "			_update()\n"
+"			_btnp_clear()\n"
 "			if _draw ~= nil then _draw() end\n"
 "		end\n"
 "		__updateTick = not __updateTick\n"
