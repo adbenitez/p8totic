@@ -614,7 +614,6 @@ char p8totic_lua[] =
 "\n"
 "__map=map\n"
 "function map(cel_x,cel_y,sx,sy,cel_w,cel_h)\n"
-" sx,sy=__p8_coord(sx,sy)\n"
 " local cel\n"
 "	for cy=0,cel_h-1 do\n"
 "	 for cx=0,cel_w-1 do\n"
