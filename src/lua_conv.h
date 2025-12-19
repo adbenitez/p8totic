@@ -723,9 +723,8 @@ char p8totic_lua[] =
 "\n"
 /*"-- TIC function to call pico-8 callbacks.\n"*/
 "__updateTick = true\n"
-"__initalized = false\n"
-"__hoffs = (240-128)/2\n"
-"__voffs = (136-128)/2\n"
+"__hoffs = 56\n" /*"(240-128)/2\n"*/
+"__voffs = 4\n" /*"(136-128)/2\n"*/
 "function _frame_clear()\n"
 "	rect(0,0,240,__voffs,0)\n"
 "	rect(0,__voffs,__hoffs,128,0)\n"
@@ -733,19 +732,18 @@ char p8totic_lua[] =
 "	rect(0,__voffs+128,240,__voffs,0)\n"
 "end\n"
 "\n"
-"function TIC()\n"
+"function BOOT()\n"
 "	-- Initialize\n"
-"	if __initalized == false then\n"
-"		cls()\n"
-"		clip()\n"
-/*"		PICO8_PALETTE()\n"*/
-"		if _init ~= nil then\n"
-"			_init()\n"
-"		end\n"
-"		__initalized = true\n"
-"		_btnp_clear()\n"
+"	cls()\n"
+"	clip()\n"
+/*"	PICO8_PALETTE()\n"*/
+"	if _init ~= nil then\n"
+"		_init()\n"
 "	end\n"
+"	_btnp_clear()\n"
+"end\n"
 "\n"
+"function TIC()\n"
 /*"	-- Update button state\n"*/
 "	for p = 0,3 do\n"
 "		for i = 0,7 do\n"
@@ -755,8 +753,8 @@ char p8totic_lua[] =
 "	end\n"
 /*"	-- Update and Draw\n"*/
 /*"	-- set screen offset, center PICO-8 screen\n"*/
-"	poke(0x3ff9,-__hoffs)\n"
-"	poke(0x3ffa,-__voffs)\n"
+"	poke(0x3ff9,__hoffs)\n"
+"	poke(0x3ffa,__voffs)\n"
 "	if _update60 ~= nil then -- 60 FPS\n"
 "		_update60()\n"
 "		_btnp_clear()\n"
