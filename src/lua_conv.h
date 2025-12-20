@@ -726,10 +726,8 @@ char p8totic_lua[] =
 "__hoffs = 56\n" /*"(240-128)/2\n"*/
 "__voffs = 4\n" /*"(136-128)/2\n"*/
 "function _frame_clear()\n"
-"	rect(0,0,240,__voffs,0)\n"
-"	rect(0,__voffs,__hoffs,128,0)\n"
-"	rect(__hoffs+128,__voffs,__hoffs,128,0)\n"
-"	rect(0,__voffs+128,240,__voffs,0)\n"
+"	rect(128,0,112,128,0)\n"
+"	rect(0,128,240,8,0)\n"
 "end\n"
 "\n"
 "function BOOT()\n"
@@ -753,8 +751,8 @@ char p8totic_lua[] =
 "	end\n"
 /*"	-- Update and Draw\n"*/
 /*"	-- set screen offset, center PICO-8 screen\n"*/
-"	poke(0x3ff9,__hoffs)\n"
-"	poke(0x3ffa,__voffs)\n"
+"	poke(0x3ff9,-__hoffs)\n"
+"	poke(0x3ffa,-__voffs)\n"
 "	if _update60 ~= nil then -- 60 FPS\n"
 "		_update60()\n"
 "		_btnp_clear()\n"
@@ -767,8 +765,7 @@ char p8totic_lua[] =
 "		end\n"
 "		__updateTick = not __updateTick\n"
 "	end\n"
-/*"	-- reset screen offset, draw black frame\n"*/
-"	memset(0x3FF9,0,2)\n"
+/*"	-- draw black frame\n"*/
 "	_frame_clear()\n"
 "end\n"
 "\n"
