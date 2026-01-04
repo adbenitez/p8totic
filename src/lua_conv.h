@@ -723,17 +723,9 @@ char p8totic_lua[] =
 "\n"
 /*"-- TIC function to call pico-8 callbacks.\n"*/
 "__updateTick = true\n"
-"__hoffs = 56\n" /*"(240-128)/2\n"*/
-"__voffs = 4\n" /*"(136-128)/2\n"*/
-"function _frame_clear()\n"
-"	rect(128,0,112,128,0)\n"
-"	rect(0,128,240,8,0)\n"
-"end\n"
-"\n"
 "function BOOT()\n"
 "	-- Initialize\n"
 "	cls()\n"
-"	clip()\n"
 /*"	PICO8_PALETTE()\n"*/
 "	if _init ~= nil then\n"
 "		_init()\n"
@@ -751,8 +743,9 @@ char p8totic_lua[] =
 "	end\n"
 /*"	-- Update and Draw\n"*/
 /*"	-- set screen offset, center PICO-8 screen\n"*/
-"	poke(0x3ff9,-__hoffs)\n"
-"	poke(0x3ffa,-__voffs)\n"
+"	poke(0x3ff9,-56)\n"
+"	poke(0x3ffa,-4)\n"
+"	clip(0,0,128,128)\n"
 "	if _update60 ~= nil then -- 60 FPS\n"
 "		_update60()\n"
 "		_btnp_clear()\n"
@@ -765,8 +758,10 @@ char p8totic_lua[] =
 "		end\n"
 "		__updateTick = not __updateTick\n"
 "	end\n"
-/*"	-- draw black frame\n"*/
-"	_frame_clear()\n"
+/*"	-- draw black frame (clip doesn't work with all functions)\n"*/
+"	clip(0,0,240,136)\n"
+"	rectfill(128,0,240,128,0)\n"
+"	rectfill(0,128,240,136,0)\n"
 "end\n"
 "\n"
 "-- Add pico-8 cart below!\n";
